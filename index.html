@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GAME INFO - V CIRÚRGICA + DATAS</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <style>
+        :root { --bg: #000; --card: #1a1a1a; --yellow: #ffcc00; --text: #fff; --gray: #888; --green: #22c55e; --red: #ff4444; --blue: #0088ff; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; }
+        .container { width: 100%; max-width: 400px; padding: 15px; box-sizing: border-box; margin: 0 auto; text-align: center; }
+        .screen { display: none; }
+        .active { display: block !important; }
+        .card { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 15px; border-top: 3px solid var(--yellow); text-align: left; }
+        input, select { width: 100%; padding: 12px; margin: 5px 0; border-radius: 8px; background: #0b0b0b; color: #fff; border: 1px solid #333; box-sizing: border-box; font-size: 16px; }
+        .btn { width: 100%; background: var(--yellow); color: #000; border: none; padding: 15px; font-weight: bold; border-radius: 8px; cursor: pointer; text-transform: uppercase; margin-top: 10px; font-size: 0.9rem; }
+        .tab-menu { display: flex; gap: 4px; margin-bottom: 15px; }
+        .btn-tab { flex: 1; padding: 10px; font-size: 0.65rem; background: #222; color: #fff; border: none; border-radius: 5px; font-weight: bold; }
+        .active-tab { background: var(--yellow); color: #000; }
+        .venda-item { background: #111; padding: 12px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #333; text-align: left; border-left: 5px solid var(--yellow); position: relative; }
+        .item-resumo { background: #222; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #333; }
+        .item-resumo span { display: block; font-weight: bold; color: var(--yellow); font-size: 1.1rem; }
+        .btn-icon { background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-left: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="screenLogin" class="screen active">
+            <h1 style="color:var(--yellow); margin-top:50px;">GAME INFO</h1>
+            <input type="email" id="emailLogin" placeholder="E-mail">
+            <input type="password" id="passLogin" placeholder="Senha">
+            <button class="btn" onclick="loginFirebase()">Entrar</button>
+        </div>
+
+        <div id="screenApp" class="screen">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <span style="font-size:0.7rem;">Olá, <b id="uAtivo" style="color:var(--yellow)">-</b></span>
+                <button onclick="auth.signOut().then(()=>location.reload())" style="background:none; border:none; color:var(--red); font-weight:bold;">SAIR</button>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                <h2 style="margin:0; font-size:1.4rem;">GAME INFO 🎮</h2>
+                <button style="background:none; border:none; color:var(--yellow); font-size:1.6rem;" onclick="mudar(4)">⚙️</button>
+            </div>
+            <div class="tab-menu">
+                <button class="btn-tab active-tab" id="t1" onclick="mudar(1)">CAIXA</button>
+                <button class="btn-tab" id="t2" onclick="mudar(2)">HISTÓRICO</button>
+                <button class="btn-tab" id="t3" onclick="mudar(3)">ESTOQUE</button>
+            </div>
+
+            <div id="aba1">
+                <div class="card">
+                    <select id="tVenda"><option value="Serviço">🔧 Serviço</option><option value="Produto">📦 Produto</option></select>
+                    <select id="selectPeca" onchange="carregarPeca()"></select>
+                    <input type="text" id="desc" placeholder="Descrição">
+                    <div style="display:flex; gap:8px;"><input type="number" id="cust" placeholder="Custo R$" value="0"><input type="number" id="vend" placeholder="Venda R$"></div>
+                    <button class="btn" onclick="lancar()">Lançar</button>
+                </div>
+                <div id="gridValores" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;"></div>
+                <div id="listaCaixa" style="max-height:300px; overflow-y:auto;"></div>
+                <button class="btn" style="background:#222; color:white;" onclick="arquivar()">Fechar Dia (Arquivar)</button>
+            </div>
+
+            <div id="aba2" style="display:none;">
+                <div class="card">
+                    <input type="text" id="busca" placeholder="🔍 Filtrar histórico..." onkeyup="filtrar()">
+                    
+                    <div style="display:flex; gap:5px; margin-top:10px;">
+                        <input type="date" id="dataIni" style="margin:0; padding:8px;">
+                        <input type="date" id="dataFim" style="margin:0; padding:8px;">
+                    </div>
+
+                    <button class="btn" style="background:var(--blue); color:white; font-size:0.75rem; margin-bottom:5px; margin-top:10px;" onclick="gerarRelatorioHist()">📊 GERAR RELATÓRIO</button>
+                    <button class="btn" style="background:var(--red); color:white; font-size:0.75rem;" onclick="limparTudoHistorico()">LIMPAR TODO HISTÓRICO</button>
+                </div>
+                
+                <div id="areaRelatorio" class="card" style="display:none; border-color:var(--blue);">
+                    <h3 style="margin-top:0; color:var(--blue);">📊 RESULTADO DO RELATÓRIO</h3>
+                    <div id="corpoRelatorio" style="font-size:0.9rem; line-height:1.6; margin-bottom:15px;"></div>
+                    <button class="btn" style="background:var(--blue); color:#fff;" onclick="window.print()">📥 IMPRIMIR / PDF</button>
+                    <button class="btn" style="background:#444; color:#fff;" onclick="document.getElementById('areaRelatorio').style.display='none'">FECHAR RELATÓRIO</button>
+                </div>
+
+                <div id="listaHist"></div>
+            </div>
+
+            <div id="aba3" style="display:none;"><div class="card"><h2>➕ ESTOQUE</h2><input type="text" id="nProd" placeholder="Peça"><input type="number" id="cProd" placeholder="Custo"><button class="btn" onclick="addEstoque()">Salvar</button></div><div id="listaEstoque"></div></div>
+            <div id="aba4" style="display:none;"><div class="card"><h2>⚙️ TAXAS</h2><label>Loja % Serv</label><input type="number" id="cfgLojaServ"><label>Lucas % Serv</label><input type="number" id="cfgLucasServ"><hr><label>Loja % Prod</label><input type="number" id="cfgLojaProd"><label>Lucas % Prod</label><input type="number" id="cfgLucasProd"><button class="btn" onclick="salvarConfig()">Salvar</button></div></div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = { apiKey: "AIzaSyCmSqPQ40Emwzu2MDMH_0AxAhkElutWkok", authDomain: "gameinfogestao.firebaseapp.com", projectId: "gameinfogestao", storageBucket: "gameinfogestao.firebasestorage.app", messagingSenderId: "289347667383", appId: "1:289347667383:web:d6e19796f630e5fcaf5432" };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore(); const auth = firebase.auth();
+        let userN = "", hGeral = [], configGlobal = { lojaServ: 10, lucasServ: 30, lucasProd: 0, lojaProd: 0 };
+
+        auth.onAuthStateChanged(u => {
+            if(u) {
+                userN = u.email.split('@')[0].toUpperCase();
+                document.getElementById('uAtivo').innerText = userN;
+                document.getElementById('screenLogin').classList.remove('active');
+                document.getElementById('screenApp').classList.add('active');
+                sinc();
+            } else { document.getElementById('screenLogin').classList.add('active'); document.getElementById('screenApp').classList.remove('active'); }
+        });
+
+        function loginFirebase() { auth.signInWithEmailAndPassword(document.getElementById('emailLogin').value, document.getElementById('passLogin').value).catch(err => alert("Erro no Login.")); }
+
+        function sinc() {
+            db.collection("config").doc("geral").onSnapshot(doc => { if(doc.exists) { configGlobal = doc.data(); document.getElementById('cfgLojaServ').value = configGlobal.lojaServ || 0; document.getElementById('cfgLucasServ').value = configGlobal.lucasServ || 0; document.getElementById('cfgLucasProd').value = configGlobal.lucasProd || 0; document.getElementById('cfgLojaProd').value = configGlobal.lojaProd || 0; } });
+            db.collection("caixa").orderBy("data","desc").onSnapshot(s => { let items = []; s.forEach(d => items.push({...d.data(), id: d.id})); renderCaixa(items); });
+            db.collection("relatorio").orderBy("data","desc").limit(100).onSnapshot(s => { hGeral = []; s.forEach(d => hGeral.push({...d.data(), id: d.id})); renderHist(hGeral); });
+            db.collection("estoque").onSnapshot(s => { let p = []; s.forEach(d => p.push({...d.data(), id: d.id})); renderEstoque(p); });
+        }
+
+        function renderCaixa(items) {
+            const l = document.getElementById('listaCaixa'); l.innerHTML = '';
+            let tLeo=0, tDan=0, tLc=0, tLj=0;
+            items.forEach(i => {
+                let vV = i.venda || 0, vC = i.custo || 0;
+                if(i.tipo === "Serviço") {
+                    let lj = vV * ((configGlobal.lojaServ || 0)/100); tLj += lj; let s = vV - lj - vC;
+                    if(i.vend === 'LUCAS') { let p = s * ((configGlobal.lucasServ || 0)/100); tLc += p; tLeo += (s-p)*0.6; tDan += (s-p)*0.4; } else { tLeo += s*0.6; tDan += s*0.4; }
+                } else {
+                    let ljP = vV * ((configGlobal.lojaProd || 0)/100); tLj += ljP; let lucro = vV - ljP - vC; let pLcProd = lucro * ((configGlobal.lucasProd || 0)/100);
+                    if(i.vend === 'LUCAS') { tLc += pLcProd; tLeo += (lucro-pLcProd)*0.5; tDan += (lucro-pLcProd)*0.5; } else { tLeo += lucro*0.5; tDan += lucro*0.5; }
+                }
+                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${i.tipo === 'Serviço' ? '#0088ff' : '#22c55e'}"><button class="btn-icon" style="float:right; color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button><b>${i.desc}</b><br><small>R$ ${vV.toFixed(2)} (${i.hora || ''})</small></div>`;
+            });
+            document.getElementById('gridValores').innerHTML = `<div class="item-resumo">LÉO<span>R$ ${tLeo.toFixed(2)}</span></div><div class="item-resumo">DANIEL<span>R$ ${tDan.toFixed(2)}</span></div><div class="item-resumo">LUCAS<span>R$ ${tLc.toFixed(2)}</span></div><div class="item-resumo">LOJA<span>R$ ${tLj.toFixed(2)}</span></div>`;
+        }
+
+        function renderHist(dados) {
+            const l = document.getElementById('listaHist'); l.innerHTML = '';
+            dados.forEach(i => {
+                l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;"><button class="btn-icon" onclick="reabrirVenda('${i.id}')">🔄</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada}</small><br><b>${i.desc}</b><br><small>R$ ${(i.venda||0).toFixed(2)} (${i.vend})</small></div>`;
+            });
+        }
+
+        function reabrirVenda(id) {
+            if(confirm("Voltar esta venda para o caixa?")) {
+                db.collection("relatorio").doc(id).get().then(doc => {
+                    if(doc.exists) {
+                        db.collection("caixa").add(doc.data()).then(() => {
+                            db.collection("relatorio").doc(id).delete();
+                            mudar(1);
+                        });
+                    }
+                });
+            }
+        }
+
+        function limparTudoHistorico() {
+            if(confirm("Isso vai apagar TUDO do histórico. Tem certeza?")) {
+                db.collection("relatorio").get().then(s => s.forEach(d => db.collection("relatorio").doc(d.id).delete()));
+            }
+        }
+
+        // A UNICA FUNÇÃO QUE MUDEI: O Filtro de Data à prova de balas
+        function gerarRelatorioHist() {
+            let dados = window.filtrados || hGeral;
+            let dIni = document.getElementById('dataIni').value;
+            let dFim = document.getElementById('dataFim').value;
+
+            if (dIni || dFim) {
+                // Transforma a data do HTML (AAAA-MM-DD) em um número inteiro (Ex: 20240415) para não dar bug em navegador nenhum
+                let numIni = dIni ? parseInt(dIni.split('-').join('')) : 0;
+                let numFim = dFim ? parseInt(dFim.split('-').join('')) : 99999999;
+
+                dados = dados.filter(i => {
+                    if(!i.dataFormatada) return false;
+                    let partes = i.dataFormatada.split('/');
+                    if(partes.length === 3) {
+                        // Transforma o DD/MM/AAAA salvo no Firebase no mesmo número inteiro
+                        let numVenda = parseInt(partes[2] + partes[1] + partes[0]);
+                        return numVenda >= numIni && numVenda <= numFim;
+                    }
+                    return false;
+                });
+            }
+
+            if(dados.length === 0) return alert("Nenhuma venda encontrada no período.");
+
+            let b=0, c=0, leo=0, dan=0, lucas=0, loja=0;
+            dados.forEach(i => {
+                let vV = i.venda || 0, vC = i.custo || 0; b += vV; c += vC;
+                if(i.tipo === "Serviço") { let lj = vV * ((configGlobal.lojaServ || 0)/100); loja += lj; let s = vV - lj - vC; if(i.vend === 'LUCAS') { let p = s * ((configGlobal.lucasServ || 0)/100); lucas += p; leo += (s-p)*0.6; dan += (s-p)*0.4; } else { leo += s*0.6; dan += s*0.4; }
+                } else { let ljP = vV * ((configGlobal.lojaProd || 0)/100); loja += ljP; let lucro = vV - ljP - vC; let pLcProd = lucro * ((configGlobal.lucasProd || 0)/100); if(i.vend === 'LUCAS') { lucas += pLcProd; leo += (lucro-pLcProd)*0.5; dan += (lucro-pLcProd)*0.5; } else { leo += lucro*0.5; dan += lucro*0.5; } }
+            });
+            document.getElementById('corpoRelatorio').innerHTML = `<b>Bruto:</b> R$ ${b.toFixed(2)}<br><b>Custo:</b> R$ ${c.toFixed(2)}<hr style="border-color:#333;"><b>Leo:</b> R$ ${leo.toFixed(2)}<br><b>Daniel:</b> R$ ${dan.toFixed(2)}<br><b>Lucas:</b> R$ ${lucas.toFixed(2)}<br><b>Loja:</b> R$ ${loja.toFixed(2)}`;
+            document.getElementById('areaRelatorio').style.display = 'block';
+        }
+
+        function mudar(n) { const ids=['aba1','aba2','aba3','aba4']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
+        function filtrar() { const t=document.getElementById('busca').value.toLowerCase(); window.filtrados=hGeral.filter(i=>i.desc.toLowerCase().includes(t)||i.dataFormatada.includes(t)); renderHist(window.filtrados); }
+        function carregarPeca() { const s=document.getElementById('selectPeca'); if(s.value){ document.getElementById('desc').value=s.options[s.selectedIndex].getAttribute('data-nome'); document.getElementById('cust').value=s.value; } }
+        function renderEstoque(prods) { const sel=document.getElementById('selectPeca'), l=document.getElementById('listaEstoque'); sel.innerHTML='<option value="">-- Peça --</option>'; l.innerHTML=''; prods.forEach(p=>{ sel.innerHTML+=`<option value="${p.custo}" data-nome="${p.nome}">${p.nome}</option>`; l.innerHTML+=`<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><span><b>${p.nome}</b><br>R$ ${p.custo}</span><button style="color:red; background:none; border:none;" onclick="db.collection('estoque').doc('${p.id}').delete()">🗑️</button></div>`; }); }
+        function addEstoque() { const n=document.getElementById('nProd').value, c=parseFloat(document.getElementById('cProd').value); if(n&&!isNaN(c)) db.collection("estoque").add({nome:n, custo:c}).then(()=>{ document.getElementById('nProd').value=''; document.getElementById('cProd').value=''; }); }
+        function salvarConfig() { db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value)||0, lucasServ: parseFloat(document.getElementById('cfgLucasServ').value)||0, lucasProd: parseFloat(document.getElementById('cfgLucasProd').value)||0, lojaProd: parseFloat(document.getElementById('cfgLojaProd').value)||0 }).then(()=>{ alert("Salvo!"); mudar(1); }); }
+        function lancar() { const v={ tipo:document.getElementById('tVenda').value, desc:document.getElementById('desc').value, venda:parseFloat(document.getElementById('vend').value), custo:parseFloat(document.getElementById('cust').value)||0, vend:userN, data:firebase.firestore.Timestamp.now(), dataFormatada:new Date().toLocaleDateString('pt-BR'), hora:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) }; if(!v.desc||isNaN(v.venda)) return alert("Erro!"); db.collection("caixa").add(v).then(()=>{ document.getElementById('desc').value=''; document.getElementById('vend').value=''; }); }
+        function arquivar() { if(confirm("Arquivar dia?")) db.collection("caixa").get().then(s=>s.forEach(d=>{ db.collection("relatorio").add(d.data()); db.collection("caixa").doc(d.id).delete(); })); }
+    </script>
+</body>
+</html>
