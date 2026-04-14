@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GAME INFO - GESTÃO COMPLETA</title>
+    <title>GAME INFO - GESTÃO INTELIGENTE</title>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <style>
-        :root { --bg: #000; --card: #1a1a1a; --yellow: #ffcc00; --text: #fff; --gray: #888; --green: #22c55e; --red: #ff4444; --blue: #0088ff; }
+        :root { --bg: #000; --card: #1a1a1a; --yellow: #ffcc00; --text: #fff; --gray: #555; --green: #22c55e; --red: #ff4444; --blue: #0088ff; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; }
         .container { width: 100%; max-width: 400px; padding: 15px; box-sizing: border-box; margin: 0 auto; text-align: center; }
         .screen { display: none; }
@@ -23,7 +23,7 @@
         .venda-item { background: #111; padding: 12px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #333; text-align: left; border-left: 5px solid var(--yellow); position: relative; }
         .item-resumo { background: #222; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #333; }
         .item-resumo span { display: block; font-weight: bold; color: var(--yellow); font-size: 1.1rem; }
-        .btn-icon { background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-left: 8px; }
+        .btn-icon { background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-left: 8px; padding: 0;}
     </style>
 </head>
 <body>
@@ -38,11 +38,11 @@
         <div id="screenApp" class="screen">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <span style="font-size:0.7rem;">Olá, <b id="uAtivo" style="color:var(--yellow)">-</b></span>
-                <button onclick="auth.signOut().then(()=>location.reload())" style="background:none; border:none; color:var(--red); font-weight:bold;">SAIR</button>
+                <button onclick="auth.signOut().then(()=>location.reload())" style="background:none; border:none; color:var(--red); font-weight:bold; cursor:pointer;">SAIR</button>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <h2 style="margin:0; font-size:1.4rem;">GAME INFO 🎮</h2>
-                <button id="btnConfig" style="background:none; border:none; color:var(--yellow); font-size:1.6rem;" onclick="mudar(4)">⚙️</button>
+                <button id="btnConfig" style="background:none; border:none; color:var(--yellow); font-size:1.6rem; cursor:pointer;" onclick="mudar(4)">⚙️</button>
             </div>
             <div class="tab-menu">
                 <button class="btn-tab active-tab" id="t1" onclick="mudar(1)">CAIXA</button>
@@ -52,7 +52,7 @@
 
             <div id="aba1">
                 <div class="card">
-                    <select id="tVenda" onchange="toggleEstoqueField()"><option value="Serviço">🔧 Serviço</option><option value="Produto">📦 Produto</option></select>
+                    <select id="tVenda" onchange="renderEstoqueDropdown()"><option value="Serviço">🔧 Serviço</option><option value="Produto">📦 Produto</option></select>
                     <select id="statusVenda"><option value="Pago">✅ Pago</option><option value="Em Aberto">⏳ Em Aberto</option></select>
                     <select id="selectPeca" onchange="carregarPeca()"></select>
                     <input type="text" id="desc" placeholder="Descrição">
@@ -90,6 +90,7 @@
                     <input type="text" id="nProd" placeholder="Peça / Jogo">
                     <input type="number" id="cProd" placeholder="Custo">
                     <input type="number" id="qProd" placeholder="Quantidade" value="1">
+                    <select id="catProd"><option value="Serviço">🔧 Uso em Serviço</option><option value="Produto">📦 Venda Direta</option></select>
                     <button id="btnSalvarEstoque" class="btn" onclick="addEstoque()">Salvar</button>
                     <button id="btnCancelarEdit" class="btn" style="background:#444; color:#fff; display:none; margin-top:5px;" onclick="cancelarEdicaoPeca()">Cancelar</button>
                 </div>
@@ -104,7 +105,7 @@
         const firebaseConfig = { apiKey: "AIzaSyCmSqPQ40Emwzu2MDMH_0AxAhkElutWkok", authDomain: "gameinfogestao.firebaseapp.com", projectId: "gameinfogestao", storageBucket: "gameinfogestao.firebasestorage.app", messagingSenderId: "289347667383", appId: "1:289347667383:web:d6e19796f630e5fcaf5432" };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore(); const auth = firebase.auth();
-        let userN = "", hGeral = [], configGlobal = { lojaServ: 10, lucasServ: 30, lucasProd: 15, lojaProd: 0 }, ehFunc = false;
+        let userN = "", hGeral = [], configGlobal = { lojaServ: 10, lucasServ: 30, lucasProd: 15, lojaProd: 0 }, ehFunc = false, pEstoque = [];
 
         auth.onAuthStateChanged(u => {
             if(u) {
@@ -124,10 +125,19 @@
             db.collection("config").doc("geral").onSnapshot(doc => { if(doc.exists) configGlobal = doc.data(); });
             db.collection("caixa").orderBy("data","desc").onSnapshot(s => { let items = []; s.forEach(d => items.push({...d.data(), id: d.id})); renderCaixa(items); });
             db.collection("relatorio").orderBy("data","desc").limit(100).onSnapshot(s => { hGeral = []; s.forEach(d => hGeral.push({...d.data(), id: d.id})); renderHist(hGeral); });
-            db.collection("estoque").onSnapshot(s => { let p = []; s.forEach(d => p.push({...d.data(), id: d.id})); renderEstoque(p); });
+            db.collection("estoque").onSnapshot(s => { pEstoque = []; s.forEach(d => pEstoque.push({...d.data(), id: d.id})); renderEstoqueList(); renderEstoqueDropdown(); });
         }
 
-        function toggleEstoqueField() { document.getElementById('selectPeca').style.display = (document.getElementById('tVenda').value === 'Produto') ? 'block' : 'none'; }
+        function renderEstoqueDropdown() {
+            const sel = document.getElementById('selectPeca');
+            const tipoSelecionado = document.getElementById('tVenda').value;
+            sel.innerHTML = '<option value="">-- Selecionar Peça do Estoque --</option>';
+            
+            pEstoque.filter(p => p.categoria === tipoSelecionado).forEach(p => {
+                sel.innerHTML += `<option value="${p.custo}" data-nome="${p.nome}" data-qtd="${p.qtd}" data-id="${p.id}">${p.nome} (${p.qtd} un)</option>`;
+            });
+            document.getElementById('desc').value = ''; document.getElementById('cust').value = '0';
+        }
 
         function carregarPeca() {
             const s = document.getElementById('selectPeca');
@@ -138,11 +148,17 @@
                 document.getElementById('btnLancar').disabled = (qtd <= 0);
                 document.getElementById('msgEstoque').style.display = (qtd <= 0) ? 'block' : 'none';
                 document.getElementById('msgEstoque').innerText = "ESTOQUE ZERADO!";
+            } else {
+                document.getElementById('btnLancar').disabled = false;
+                document.getElementById('msgEstoque').style.display = 'none';
             }
         }
 
-        function marcarComoPago(id, colecao) {
-            if(confirm("Confirmar que está Pago sim?")) db.collection(colecao).doc(id).update({ status: "Pago" });
+        function alternarStatus(id, statusAtual, colecao) {
+            let novoStatus = (statusAtual === 'Pago') ? 'Em Aberto' : 'Pago';
+            if(confirm(`Mudar para ${novoStatus}?`)) {
+                db.collection(colecao).doc(id).update({ status: novoStatus });
+            }
         }
 
         function lancar() {
@@ -154,24 +170,25 @@
                 vend: userN, data: firebase.firestore.Timestamp.now(), dataFormatada: new Date().toLocaleDateString('pt-BR'),
                 hora: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), pecaId: pecaId || null
             };
-            if(!v.desc||isNaN(v.venda)) return alert("Erro!");
+            if(!v.desc||isNaN(v.venda)) return alert("Preencha descrição e valor!");
             db.collection("caixa").add(v).then(() => {
-                if(tipo === 'Produto' && pecaId) {
+                if(pecaId) {
                     const ref = db.collection("estoque").doc(pecaId);
                     db.runTransaction(t => t.get(ref).then(d => t.update(ref, {qtd: d.data().qtd - 1})));
                 }
                 document.getElementById('desc').value=''; document.getElementById('vend').value='';
+                document.getElementById('selectPeca').value = '';
             });
         }
 
         function renderCaixa(items) {
             const l = document.getElementById('listaCaixa'); l.innerHTML = '';
-            let tLeo=0, tDan=0, tLc=0, tLj=0, tDevolverCusto=0;
+            let tLeo=0, tDan=0, tLc=0, tLj=0, tInv=0;
             items.forEach(i => {
                 let vV = i.venda || 0, vC = i.custo || 0;
                 let isF = (i.vend || '').toUpperCase().includes('JAPAO') || (i.vend || '').toUpperCase().includes('XBOX') || (i.vend || '').toUpperCase().includes('LUCAS');
-                if (i.status !== 'Em Aberto') {
-                    tDevolverCusto += vC;
+                if (i.status === 'Pago') {
+                    tInv += vC;
                     if(i.tipo === "Serviço") {
                         let lj = vV * ((configGlobal.lojaServ || 10)/100); tLj += lj; let s = vV - lj - vC;
                         if(isF) { let p = s * 0.30; tLc += p; tLeo += (s-p)*0.6; tDan += (s-p)*0.4; } else { tLeo += s*0.6; tDan += s*0.4; }
@@ -181,12 +198,13 @@
                     }
                 }
                 if(!ehFunc || (ehFunc && isF)) {
-                    let btnP = (i.status === 'Em Aberto') ? `<button class="btn-icon" style="float:right; color:var(--green);" onclick="marcarComoPago('${i.id}', 'caixa')">💲</button>` : '';
-                    l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${i.tipo === 'Serviço' ? '#0088ff' : '#22c55e'}">${btnP}<button class="btn-icon" style="float:right; color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button><b>${i.desc}</b> <span style="color:var(--yellow); font-size:0.7rem;">[${i.status}]</span><br><small>R$ ${vV.toFixed(2)} (Custo: ${vC})</small></div>`;
+                    let corCifrao = (i.status === 'Pago') ? 'var(--green)' : 'var(--gray)';
+                    let btnEdit = `<button class="btn-icon" style="float:right; color:${corCifrao}; margin-left: 15px;" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button>`;
+                    l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${i.tipo === 'Serviço' ? '#0088ff' : '#22c55e'}">${btnEdit}<button class="btn-icon" style="float:right; color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button><b>${i.desc}</b> <span style="color:var(--yellow); font-size:0.7rem;">[${i.status}]</span><br><small>R$ ${vV.toFixed(2)} (Custo: ${vC})</small></div>`;
                 }
             });
             if(ehFunc) document.getElementById('gridValores').innerHTML = `<div class="item-resumo" style="grid-column: span 2;">MINHA COMISSÃO<span>R$ ${tLc.toFixed(2)}</span></div>`;
-            else document.getElementById('gridValores').innerHTML = `<div class="item-resumo">LÉO<span>R$ ${tLeo.toFixed(2)}</span></div><div class="item-resumo">DANIEL (Lucro)<span>R$ ${tDan.toFixed(2)}</span></div><div class="item-resumo" style="border-color:var(--green)">REINVESTIR (Custo)<span>R$ ${tDevolverCusto.toFixed(2)}</span></div><div class="item-resumo">LOJA<span>R$ ${tLj.toFixed(2)}</span></div><div class="item-resumo">JAPÃO<span>R$ ${tLc.toFixed(2)}</span></div>`;
+            else document.getElementById('gridValores').innerHTML = `<div class="item-resumo">LÉO<span>R$ ${tLeo.toFixed(2)}</span></div><div class="item-resumo">DANIEL (Lucro)<span>R$ ${tDan.toFixed(2)}</span></div><div class="item-resumo" style="border-color:var(--green)">REINVESTIR (Custo)<span>R$ ${tInv.toFixed(2)}</span></div><div class="item-resumo">LOJA<span>R$ ${tLj.toFixed(2)}</span></div><div class="item-resumo">JAPÃO<span>R$ ${tLc.toFixed(2)}</span></div>`;
         }
 
         function renderHist(dados) {
@@ -194,35 +212,36 @@
             dados.forEach(i => {
                 let isF = (i.vend || '').toUpperCase().includes('JAPAO') || (i.vend || '').toUpperCase().includes('XBOX') || (i.vend || '').toUpperCase().includes('LUCAS');
                 if(!ehFunc || (ehFunc && isF)) {
-                    let btnP = (i.status === 'Em Aberto') ? `<button class="btn-icon" onclick="marcarComoPago('${i.id}', 'relatorio')">💲</button>` : '';
-                    l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;">${btnP}<button class="btn-icon" onclick="reabrirVenda('${i.id}')">🔄</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada} [${i.status}]</small><br><b>${i.desc}</b><br><small>R$ ${(i.venda||0).toFixed(2)} (Custo: ${i.custo})</small></div>`;
+                    let corCifraoH = (i.status === 'Pago') ? 'var(--green)' : 'var(--gray)';
+                    let btnEditH = `<button class="btn-icon" style="color:${corCifraoH};" onclick="alternarStatus('${i.id}', '${i.status}', 'relatorio')">💲</button>`;
+                    l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right; display:flex; align-items:center;">${btnEditH}<button class="btn-icon" style="color:red; margin-left:15px;" onclick="if(confirm('Apagar?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada} [${i.status}]</small><br><b>${i.desc}</b><br><small>R$ ${(i.venda||0).toFixed(2)} (${i.vend})</small></div>`;
                 }
             });
         }
 
-        function renderEstoque(prods) {
-            const sel = document.getElementById('selectPeca'), l = document.getElementById('listaEstoque');
-            sel.innerHTML = '<option value="">-- Selecione o Produto --</option>'; l.innerHTML = '';
-            prods.forEach(p => {
-                sel.innerHTML += `<option value="${p.custo}" data-nome="${p.nome}" data-qtd="${p.qtd}" data-id="${p.id}">${p.nome} (${p.qtd} un)</option>`;
-                l.innerHTML += `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><span><b>${p.nome}</b><br>Qtd: ${p.qtd} | Custo: R$ ${p.custo}</span><div><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoPeca('${p.id}', '${p.nome}', ${p.custo}, ${p.qtd})">✏️</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Apagar?'))db.collection('estoque').doc('${p.id}').delete()">🗑️</button></div></div>`;
+        function renderEstoqueList() {
+            const l = document.getElementById('listaEstoque'); l.innerHTML = '';
+            pEstoque.forEach(p => {
+                let icon = (p.categoria === 'Serviço') ? '🔧' : '📦';
+                l.innerHTML += `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><span>${icon} <b>${p.nome}</b><br>Qtd: ${p.qtd} | Custo: R$ ${p.custo}</span><div><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoPeca('${p.id}', '${p.nome}', ${p.custo}, ${p.qtd}, '${p.categoria}')">✏️</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Apagar?'))db.collection('estoque').doc('${p.id}').delete()">🗑️</button></div></div>`;
             });
         }
 
         function addEstoque() {
-            const n = document.getElementById('nProd').value, c = parseFloat(document.getElementById('cProd').value), q = parseInt(document.getElementById('qProd').value), id = document.getElementById('editPecaId').value;
+            const n = document.getElementById('nProd').value, c = parseFloat(document.getElementById('cProd').value), q = parseInt(document.getElementById('qProd').value), cat = document.getElementById('catProd').value, id = document.getElementById('editPecaId').value;
             if(!n || isNaN(c)) return alert("Erro!");
-            if(id) db.collection("estoque").doc(id).update({nome:n, custo:c, qtd:q||0}).then(() => cancelarEdicaoPeca());
-            else db.collection("estoque").add({nome:n, custo:c, qtd:q||0}).then(() => { document.getElementById('nProd').value=''; document.getElementById('cProd').value=''; document.getElementById('qProd').value='1'; });
+            const dados = {nome:n, custo:c, qtd:q||0, categoria:cat};
+            if(id) db.collection("estoque").doc(id).update(dados).then(() => cancelarEdicaoPeca());
+            else db.collection("estoque").add(dados).then(() => { document.getElementById('nProd').value=''; document.getElementById('cProd').value=''; document.getElementById('qProd').value='1'; });
         }
 
-        function prepararEdicaoPeca(id, nome, custo, qtd) {
-            document.getElementById('editPecaId').value = id; document.getElementById('nProd').value = nome; document.getElementById('cProd').value = custo; document.getElementById('qProd').value = qtd;
+        function prepararEdicaoPeca(id, nome, custo, qtd, categoria) {
+            document.getElementById('editPecaId').value = id; document.getElementById('nProd').value = nome; document.getElementById('cProd').value = custo; document.getElementById('qProd').value = qtd; document.getElementById('catProd').value = categoria;
             document.getElementById('tituloEstoque').innerText = "✏️ EDITAR"; document.getElementById('btnSalvarEstoque').innerText = "ATUALIZAR"; document.getElementById('btnCancelarEdit').style.display = 'block'; window.scrollTo(0,0);
         }
 
         function cancelarEdicaoPeca() {
-            document.getElementById('editPecaId').value = ''; document.getElementById('nProd').value = ''; document.getElementById('cProd').value = ''; document.getElementById('qProd').value = '1';
+            document.getElementById('editPecaId').value = ''; document.getElementById('nProd').value = ''; document.getElementById('cProd').value = ''; document.getElementById('qProd').value = '1'; document.getElementById('catProd').value = 'Serviço';
             document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE"; document.getElementById('btnSalvarEstoque').innerText = "Salvar"; document.getElementById('btnCancelarEdit').style.display = 'none';
         }
 
@@ -232,16 +251,14 @@
             dados.forEach(i => {
                 let vV = i.venda || 0, vC = i.custo || 0; 
                 let isF = (i.vend || '').toUpperCase().includes('JAPAO') || (i.vend || '').toUpperCase().includes('XBOX') || (i.vend || '').toUpperCase().includes('LUCAS');
-                if (i.status !== 'Em Aberto') {
-                    if(!ehFunc || (ehFunc && isF)) {
-                        b += vV; c += vC; invest += vC;
-                        if(i.tipo === "Serviço") { 
-                            let lj = vV * ((configGlobal.lojaServ || 10)/100); loja += lj; let s = vV - lj - vC; 
-                            if(isF) { let p = s * 0.30; lucas += p; leo += (s-p)*0.6; dan += (s-p)*0.4; } else { leo += s*0.6; dan += s*0.4; }
-                        } else { 
-                            let ljP = vV * ((configGlobal.lojaProd || 0)/100); loja += ljP; let lucro = vV - ljP - vC; 
-                            if(isF) { let pLcProd = lucro * 0.15; lucas += pLcProd; leo += (lucro-pLcProd)*0.5; dan += (lucro-pLcProd)*0.5; } else { leo += lucro*0.5; dan += lucro*0.5; } 
-                        }
+                if (i.status === 'Pago') {
+                    b += vV; c += vC; invest += vC;
+                    if(i.tipo === "Serviço") { 
+                        let lj = vV * ((configGlobal.lojaServ || 10)/100); loja += lj; let s = vV - lj - vC; 
+                        if(isF) { let p = s * 0.30; lucas += p; leo += (s-p)*0.6; dan += (s-p)*0.4; } else { leo += s*0.6; dan += s*0.4; }
+                    } else { 
+                        let ljP = vV * ((configGlobal.lojaProd || 0)/100); loja += ljP; let lucro = vV - ljP - vC; 
+                        if(isF) { let pLcProd = lucro * 0.15; lucas += pLcProd; leo += (lucro-pLcProd)*0.5; dan += (lucro-pLcProd)*0.5; } else { leo += lucro*0.5; dan += lucro*0.5; } 
                     }
                 }
             });
@@ -255,7 +272,6 @@
         function mudar(n) { const ids=['aba1','aba2','aba3','aba4']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
         function filtrar() { const t=document.getElementById('busca').value.toLowerCase(); window.filtrados=hGeral.filter(i=>i.desc.toLowerCase().includes(t)||i.dataFormatada.includes(t)); renderHist(window.filtrados); }
         function salvarConfig() { db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value)||0, lucasServ: parseFloat(document.getElementById('cfgLucasServ').value)||0, lucasProd: parseFloat(document.getElementById('cfgLucasProd').value)||0, lojaProd: parseFloat(document.getElementById('cfgLojaProd').value)||0 }).then(()=>alert("Salvo!")); }
-        function reabrirVenda(id) { db.collection("relatorio").doc(id).get().then(doc => { if(doc.exists) { db.collection("caixa").add(doc.data()).then(() => db.collection("relatorio").doc(id).delete()); } }); }
         function limparTudoHistorico() { if(confirm("Apagar?")) db.collection("relatorio").get().then(s => s.forEach(d => db.collection("relatorio").doc(d.id).delete())); }
         function arquivar() { if(confirm("Arquivar?")) db.collection("caixa").get().then(s=>s.forEach(d=>{ db.collection("relatorio").add(d.data()); db.collection("caixa").doc(d.id).delete(); })); }
     </script>
