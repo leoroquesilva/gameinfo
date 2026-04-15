@@ -24,6 +24,8 @@
         .item-resumo span { display: block; font-weight: bold; color: var(--yellow); font-size: 1.1rem; }
         .btn-icon { background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-left: 8px; padding: 0;}
         .tag-os { color: var(--yellow); font-weight: bold; background: #333; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; margin-right: 5px; }
+        .header-categoria { background: #222; color: var(--yellow); font-size: 0.85rem; font-weight: bold; margin: 10px 0; text-transform: uppercase; padding: 12px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
+        .conteudo-categoria { display: none; padding-left: 5px; }
     </style>
 </head>
 <body>
@@ -75,6 +77,31 @@
                 <button class="btn" style="background:#222; color:white;" onclick="arquivar()">Fechar Dia (Arquivar)</button>
             </div>
 
+            <div id="aba3" style="display:none;">
+                <div class="card">
+                    <h2 id="tituloEstoque">➕ ESTOQUE</h2>
+                    <input type="hidden" id="editPecaId">
+                    <input type="text" id="nProd" placeholder="Peça / Jogo">
+                    <div style="display:flex; gap:8px;">
+                        <input type="number" id="cProd" placeholder="Custo">
+                        <input type="number" id="vSug" placeholder="Venda Sugerida">
+                    </div>
+                    <input type="number" id="qProd" placeholder="Quantidade" value="1">
+                    <select id="catProd">
+                        <option value="Leo3D">🎨 Produto/Serviço 3D (Léo)</option>
+                        <option value="Serviço">🔧 Uso em Serviço (Loja)</option>
+                        <option value="Produto">📦 Venda Direta (Loja)</option>
+                    </select>
+                    <div style="display:flex; align-items:center; gap:10px; margin: 10px 0;">
+                        <input type="checkbox" id="favProd" style="width:20px; margin:0;"> 
+                        <label for="favProd" style="color:var(--yellow); font-size:0.9rem;">⭐ DEIXAR NO TOPO</label>
+                    </div>
+                    <button id="btnSalvarEstoque" class="btn" onclick="addEstoque()">Salvar</button>
+                    <button id="btnCancelarEdit" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoPeca()">Cancelar</button>
+                </div>
+                <div id="listaEstoqueAgrupada"></div>
+            </div>
+
             <div id="aba2" style="display:none;">
                 <div class="card">
                     <input type="text" id="busca" placeholder="🔍 Filtrar..." onkeyup="filtrar()">
@@ -87,33 +114,14 @@
                 <div id="listaHist"></div>
             </div>
 
-            <div id="aba3" style="display:none;">
-                <div class="card">
-                    <h2 id="tituloEstoque">➕ ESTOQUE</h2>
-                    <input type="hidden" id="editPecaId">
-                    <input type="text" id="nProd" placeholder="Peça / Jogo">
-                    <input type="number" id="cProd" placeholder="Custo">
-                    <input type="number" id="qProd" placeholder="Quantidade" value="1">
-                    <select id="catProd">
-                        <option value="Serviço">🔧 Uso em Serviço (Loja)</option>
-                        <option value="Produto">📦 Venda Direta (Loja)</option>
-                        <option value="Leo3D">🎨 Produto/Serviço 3D (Léo)</option>
-                    </select>
-                    <div style="display:flex; align-items:center; gap:10px; margin: 10px 0;">
-                        <input type="checkbox" id="favProd" style="width:20px; margin:0;"> 
-                        <label for="favProd" style="color:var(--yellow); font-size:0.9rem;">⭐ DEIXAR NO TOPO</label>
-                    </div>
-                    <button id="btnSalvarEstoque" class="btn" onclick="addEstoque()">Salvar</button>
-                    <button id="btnCancelarEdit" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoPeca()">Cancelar</button>
-                </div>
-                <div id="listaEstoque"></div>
-            </div>
-
             <div id="aba4" style="display:none;">
                 <div class="card">
                     <h2>⚙️ TAXAS</h2>
                     <label>Loja % Serv</label><input type="number" id="cfgLojaServ">
                     <label>Lucas % Serv</label><input type="number" id="cfgLucasServ">
+                    <hr>
+                    <label>Loja % Prod</label><input type="number" id="cfgLojaProd">
+                    <label>Lucas % Prod</label><input type="number" id="cfgLucasProd">
                     <button class="btn" onclick="salvarConfig()">Salvar</button>
                 </div>
             </div>
@@ -151,14 +159,16 @@
             sel.innerHTML = '<option value="">-- Selecionar Peça / Serviço --</option>';
             pEstoque.filter(p => tipo === "Serviço" ? (p.categoria === "Serviço" || p.categoria === "Leo3D") : (p.categoria === "Produto" || p.categoria === "Leo3D"))
             .sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1))
-            .forEach(p => sel.innerHTML += `<option value="${p.custo}" data-nome="${p.nome}" data-qtd="${p.qtd}" data-id="${p.id}" data-cat="${p.categoria}">${p.favorito ? '⭐ ' : ''}${p.nome}</option>`);
+            .forEach(p => sel.innerHTML += `<option value="${p.custo}" data-venda="${p.vendaSugerida || ''}" data-nome="${p.nome}" data-qtd="${p.qtd}" data-id="${p.id}" data-cat="${p.categoria}">${p.favorito ? '⭐ ' : ''}${p.nome}</option>`);
         }
 
         function carregarPeca() {
             const s = document.getElementById('selectPeca');
             if(s.value) {
-                document.getElementById('desc').value = s.options[s.selectedIndex].getAttribute('data-nome');
+                const opt = s.options[s.selectedIndex];
+                document.getElementById('desc').value = opt.getAttribute('data-nome');
                 document.getElementById('cust').value = s.value;
+                document.getElementById('vend').value = opt.getAttribute('data-venda');
             }
         }
 
@@ -213,12 +223,13 @@
             let tLeo=0, tDan=0, tLc=0, tLj=0, tInvLoja=0, t3DLeoCusto=0;
             items.forEach(i => {
                 let vV = i.venda || 0, vC = i.custo || 0;
+                let isF = (i.vend || '').toUpperCase().includes('JAPAO') || (i.vend || '').toUpperCase().includes('LUCAS') || (i.vend || '').toUpperCase().includes('XBOX');
                 if (i.status === 'Pago') {
                     if(i.origem === 'Leo') { t3DLeoCusto += vC; } else { tInvLoja += vC; }
                     let tx = i.tipo === "Serviço" ? vV * (configGlobal.lojaServ/100) : vV * (configGlobal.lojaProd/100);
                     tLj += tx; let luc = vV - tx - vC;
-                    if(i.tipo === "Serviço") { let pLc = luc * 0.30; tLc += pLc; tLeo += (luc-pLc)*0.6; tDan += (luc-pLc)*0.4; }
-                    else { let pLc = luc * 0.15; tLc += pLc; tLeo += (luc-pLc)*0.5; tDan += (luc-pLc)*0.5; }
+                    if(i.tipo === "Serviço") { let pLc = luc * (configGlobal.lucasServ/100); tLc += pLc; tLeo += (luc-pLc)*0.6; tDan += (luc-pLc)*0.4; }
+                    else { let pLc = luc * (configGlobal.lucasProd/100); tLc += pLc; tLeo += (luc-pLc)*0.5; tDan += (luc-pLc)*0.5; }
                 }
                 let corB = i.origem === 'Leo' ? 'var(--purple)' : (i.tipo === 'Serviço' ? '#0088ff' : '#22c55e');
                 let corS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
@@ -241,33 +252,42 @@
             });
         }
 
+        function toggleCategoria(id) {
+            const content = document.getElementById('cont-' + id);
+            const icon = document.getElementById('icon-' + id);
+            if (content.style.display === 'block') { content.style.display = 'none'; icon.innerText = '▼'; }
+            else { content.style.display = 'block'; icon.innerText = '▲'; }
+        }
+
         function renderEstoqueList() {
-            const l = document.getElementById('listaEstoque'); l.innerHTML = '';
-            pEstoque.sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1)).forEach(p => {
-                l.innerHTML += `<div class="card" style="display:flex; justify-content:space-between; align-items:center;"><span>${p.favorito?'⭐':''} ${p.nome}<br>Qtd: ${p.qtd}</span><div><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoPeca('${p.id}','${p.nome}',${p.custo},${p.qtd},'${p.categoria}',${p.favorito})">✏️</button><button class="btn-icon" style="color:var(--red);" onclick="db.collection('estoque').doc('${p.id}').delete()">🗑️</button></div></div>`;
+            const container = document.getElementById('listaEstoqueAgrupada');
+            container.innerHTML = '';
+            const categorias = [{ id: 'Leo3D', nome: '🎨 3D Léo', icon: '🎨' }, { id: 'Serviço', nome: '🔧 Uso em Serviço', icon: '🔧' }, { id: 'Produto', nome: '📦 Venda Direta', icon: '📦' }];
+            categorias.forEach(cat => {
+                const itensCat = pEstoque.filter(p => p.categoria === cat.id).sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1));
+                if (itensCat.length > 0) {
+                    container.innerHTML += `<div class="header-categoria" onclick="toggleCategoria('${cat.id}')"><span>${cat.nome} (${itensCat.length})</span><span id="icon-${cat.id}">▼</span></div><div id="cont-${cat.id}" class="conteudo-categoria">${itensCat.map(p => `<div class="card" style="padding:10px; margin-bottom:8px; border-top:none; display:flex; justify-content:space-between; align-items:center;"><span>${p.favorito?'⭐':''} ${p.nome}<br><small style="color:var(--gray)">Qtd: ${p.qtd} | C: R$ ${p.custo} | V: R$ ${p.vendaSugerida || '---'}</small></span><div><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoPeca('${p.id}','${p.nome}','${p.custo}','${p.vendaSugerida||''}','${p.qtd}','${p.categoria}',${p.favorito})">✏️</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Apagar?'))db.collection('estoque').doc('${p.id}').delete()">🗑️</button></div></div>`).join('')}</div>`;
+                }
             });
         }
 
         function addEstoque() {
-            const id = document.getElementById('editPecaId').value, n = document.getElementById('nProd').value, c = parseFloat(document.getElementById('cProd').value), q = parseInt(document.getElementById('qProd').value), cat = document.getElementById('catProd').value, fav = document.getElementById('favProd').checked;
-            const dados = {nome:n, custo:c, qtd:q, categoria:cat, favorito: fav};
+            const id = document.getElementById('editPecaId').value, n = document.getElementById('nProd').value, c = document.getElementById('cProd').value, v = document.getElementById('vSug').value, q = parseInt(document.getElementById('qProd').value), cat = document.getElementById('catProd').value, fav = document.getElementById('favProd').checked;
+            const dados = {nome:n, custo:parseFloat(c)||0, vendaSugerida:parseFloat(v)||0, qtd:q, categoria:cat, favorito: fav};
             if(id) db.collection("estoque").doc(id).update(dados).then(() => cancelarEdicaoPeca());
-            else db.collection("estoque").add(dados).then(() => { document.getElementById('nProd').value=''; document.getElementById('cProd').value=''; });
+            else db.collection("estoque").add(dados).then(() => { document.getElementById('nProd').value=''; document.getElementById('cProd').value=''; document.getElementById('vSug').value=''; });
         }
 
-        function prepararEdicaoPeca(id, n, c, q, cat, fav) {
-            document.getElementById('editPecaId').value = id; document.getElementById('nProd').value = n; document.getElementById('cProd').value = c; document.getElementById('qProd').value = q; document.getElementById('catProd').value = cat; document.getElementById('favProd').checked = fav;
+        function prepararEdicaoPeca(id, n, c, v, q, cat, fav) {
+            document.getElementById('editPecaId').value = id; document.getElementById('nProd').value = n; document.getElementById('cProd').value = c; document.getElementById('vSug').value = v; document.getElementById('qProd').value = q; document.getElementById('catProd').value = cat; document.getElementById('favProd').checked = fav;
             document.getElementById('tituloEstoque').innerText = "✏️ EDITAR"; document.getElementById('btnCancelarEdit').style.display = 'block'; window.scrollTo(0,0);
         }
 
-        function cancelarEdicaoPeca() {
-            document.getElementById('editPecaId').value = ''; document.getElementById('nProd').value = ''; document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE"; document.getElementById('btnCancelarEdit').style.display = 'none';
-        }
-
+        function cancelarEdicaoPeca() { document.getElementById('editPecaId').value = ''; document.getElementById('nProd').value = ''; document.getElementById('cProd').value = ''; document.getElementById('vSug').value = ''; document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE"; document.getElementById('btnCancelarEdit').style.display = 'none'; }
         function mudar(n) { const ids=['aba1','aba2','aba3','aba4']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
         function filtrar() { const t=document.getElementById('busca').value.toLowerCase(); renderHist(hGeral.filter(i=>i.desc.toLowerCase().includes(t))); }
         function arquivar() { if(confirm("Arquivar?")) db.collection("caixa").get().then(s=>s.forEach(d=>{ db.collection("relatorio").add(d.data()); db.collection("caixa").doc(d.id).delete(); })); }
-        function salvarConfig() { db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value), lucasServ: 30, lucasProd: 15 }); }
+        function salvarConfig() { db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value), lucasServ: parseFloat(document.getElementById('cfgLucasServ').value), lucasProd: parseFloat(document.getElementById('cfgLucasProd').value), lojaProd: parseFloat(document.getElementById('cfgLojaProd').value) }).then(()=>alert("Taxas Salvas!")); }
     </script>
 </body>
 </html>
