@@ -82,6 +82,23 @@
                 <button class="btn" style="background:#222; color:white;" onclick="arquivar()">Fechar Dia (Arquivar)</button>
             </div>
 
+            <div id="aba2" style="display:none;">
+                <div class="card">
+                    <h3 style="color:var(--yellow); margin-top:0; font-size:1rem;">📅 FILTRAR PERÍODO</h3>
+                    <div style="display:flex; gap:5px;">
+                        <input type="date" id="dataInicioFiltro" style="font-size:0.8rem;">
+                        <input type="date" id="dataFimFiltro" style="font-size:0.8rem;">
+                    </div>
+                    <input type="text" id="busca" placeholder="🔍 Filtrar por O.S. ou Descrição..." onkeyup="filtrar()">
+                    <button class="btn" style="background:var(--blue); color:white;" onclick="gerarRelatorioFiltrado()">📊 GERAR RELATÓRIO DO FILTRO</button>
+                </div>
+                <div id="areaRelatorio" class="card" style="display:none; border-color:var(--blue);">
+                    <div id="corpoRelatorio"></div>
+                    <button class="btn" onclick="document.getElementById('areaRelatorio').style.display='none'">FECHAR</button>
+                </div>
+                <div id="listaHist"></div>
+            </div>
+
             <div id="aba3" style="display:none;">
                 <div class="card">
                     <h2 id="tituloEstoque">➕ ESTOQUE</h2>
@@ -105,18 +122,6 @@
                     <button id="btnCancelarEdit" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoPeca()">Cancelar</button>
                 </div>
                 <div id="listaEstoqueAgrupada"></div>
-            </div>
-
-            <div id="aba2" style="display:none;">
-                <div class="card">
-                    <input type="text" id="busca" placeholder="🔍 Filtrar..." onkeyup="filtrar()">
-                    <button class="btn" style="background:var(--blue); color:white;" onclick="gerarRelatorioHist()">📊 GERAR RELATÓRIO</button>
-                </div>
-                <div id="areaRelatorio" class="card" style="display:none; border-color:var(--blue);">
-                    <div id="corpoRelatorio"></div>
-                    <button class="btn" onclick="document.getElementById('areaRelatorio').style.display='none'">FECHAR</button>
-                </div>
-                <div id="listaHist"></div>
             </div>
 
             <div id="aba4" style="display:none;">
@@ -145,13 +150,10 @@
                 document.getElementById('uAtivo').innerText = userN;
                 document.getElementById('screenLogin').classList.remove('active');
                 document.getElementById('screenApp').classList.add('active');
-                
-                // NOVO: Define vendedor padrão pelo login
                 const selVend = document.getElementById('vendedorVenda');
                 if(userN.includes('LUCAS') || userN.includes('JAPAO')) selVend.value = 'LUCAS';
                 else if(userN.includes('DANIEL')) selVend.value = 'DANIEL';
                 else selVend.value = 'LEO';
-
                 sinc();
             } else { document.getElementById('screenLogin').classList.add('active'); document.getElementById('screenApp').classList.remove('active'); }
         });
@@ -161,7 +163,7 @@
         function sinc() {
             db.collection("config").doc("geral").onSnapshot(doc => { if(doc.exists) configGlobal = doc.data(); });
             db.collection("caixa").orderBy("data","desc").onSnapshot(s => { cAtual = []; s.forEach(d => cAtual.push({...d.data(), id: d.id})); renderCaixa(cAtual); });
-            db.collection("relatorio").orderBy("data","desc").limit(100).onSnapshot(s => { hGeral = []; s.forEach(d => hGeral.push({...d.data(), id: d.id})); renderHist(hGeral); });
+            db.collection("relatorio").orderBy("data","desc").onSnapshot(s => { hGeral = []; s.forEach(d => hGeral.push({...d.data(), id: d.id})); filtrar(); });
             db.collection("estoque").onSnapshot(s => { pEstoque = []; s.forEach(d => pEstoque.push({...d.data(), id: d.id})); renderEstoqueList(); renderEstoqueDropdown(); });
         }
 
@@ -193,16 +195,14 @@
                 tipo: document.getElementById('tVenda').value, status: document.getElementById('statusVenda').value, 
                 os: document.getElementById('osNum').value, desc: document.getElementById('desc').value,
                 venda: parseFloat(document.getElementById('vend').value), custo: parseFloat(document.getElementById('cust').value)||0,
-                vendedor: document.getElementById('vendedorVenda').value, // NOVO: Salva quem é o vendedor real
-                loginAtivo: userN, data: firebase.firestore.Timestamp.now(), dataFormatada: new Date().toLocaleDateString('pt-BR'),
+                vendedor: document.getElementById('vendedorVenda').value, loginAtivo: userN,
+                data: firebase.firestore.Timestamp.now(), dataFormatada: new Date().toLocaleDateString('pt-BR'),
+                dataISO: new Date().toISOString().split('T')[0],
                 origem: cat === "Leo3D" ? "Leo" : "Daniel"
             };
-            if(id) {
-                db.collection("caixa").doc(id).update(v).then(() => cancelarEdicaoCaixa());
-            } else {
-                db.collection("caixa").add(v).then(() => { if(pecaId) db.collection("estoque").doc(pecaId).update({qtd: firebase.firestore.FieldValue.increment(-1)}); });
-                document.getElementById('osNum').value=''; document.getElementById('desc').value=''; document.getElementById('vend').value=''; document.getElementById('cust').value='';
-            }
+            if(id) { db.collection("caixa").doc(id).update(v).then(() => cancelarEdicaoCaixa()); }
+            else { db.collection("caixa").add(v).then(() => { if(pecaId) db.collection("estoque").doc(pecaId).update({qtd: firebase.firestore.FieldValue.increment(-1)}); });
+                document.getElementById('osNum').value=''; document.getElementById('desc').value=''; document.getElementById('vend').value=''; document.getElementById('cust').value=''; }
         }
 
         function prepararEdicaoCaixa(id) {
@@ -237,33 +237,39 @@
             let tLeo=0, tDan=0, tLc=0, tLj=0, tInvLoja=0, t3DLeoCusto=0;
             items.forEach(i => {
                 let vV = i.venda || 0, vC = i.custo || 0;
-                let isLucasVendedor = (i.vendedor === 'LUCAS'); // REGRA: Só dá comissão se o vendedor for LUCAS
-                
+                let isLucasVendedor = (i.vendedor === 'LUCAS');
                 if (i.status === 'Pago') {
                     if(i.origem === 'Leo') { t3DLeoCusto += vC; } else { tInvLoja += vC; }
                     let tx = i.tipo === "Serviço" ? vV * (configGlobal.lojaServ/100) : vV * (configGlobal.lojaProd/100);
                     tLj += tx; let luc = vV - tx - vC;
-
-                    if(i.tipo === "Serviço") {
-                        let pLc = isLucasVendedor ? luc * (configGlobal.lucasServ/100) : 0;
-                        tLc += pLc; tLeo += (luc-pLc)*0.6; tDan += (luc-pLc)*0.4;
-                    } else {
-                        let pLc = isLucasVendedor ? luc * (configGlobal.lucasProd/100) : 0;
-                        tLc += pLc; tLeo += (luc-pLc)*0.5; tDan += (luc-pLc)*0.5;
-                    }
+                    if(i.tipo === "Serviço") { let pLc = isLucasVendedor ? luc * (configGlobal.lucasServ/100) : 0; tLc += pLc; tLeo += (luc-pLc)*0.6; tDan += (luc-pLc)*0.4; }
+                    else { let pLc = isLucasVendedor ? luc * (configGlobal.lucasProd/100) : 0; tLc += pLc; tLeo += (luc-pLc)*0.5; tDan += (luc-pLc)*0.5; }
                 }
                 let corB = i.origem === 'Leo' ? 'var(--purple)' : (i.tipo === 'Serviço' ? '#0088ff' : '#22c55e');
                 let corS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
                 let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : "";
-
-                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small> <span style="font-size:0.7rem; color:${corS}">[${i.status.toUpperCase()}]</span><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)}</small></div>`;
+                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)}</small></div>`;
             });
             document.getElementById('gridValores').innerHTML = `<div class="item-resumo" style="border-color:var(--purple)">3D LÉO<span>R$ ${t3DLeoCusto.toFixed(2)}</span></div><div class="item-resumo">LÉO (Sócio)<span>R$ ${tLeo.toFixed(2)}</span></div><div class="item-resumo">DANIEL (Sócio)<span>R$ ${tDan.toFixed(2)}</span></div><div class="item-resumo">JAPÃO (Comissão)<span>R$ ${tLc.toFixed(2)}</span></div><div class="item-resumo">REINVESTIR LOJA<span>R$ ${tInvLoja.toFixed(2)}</span></div><div class="item-resumo">TAXA LOJA<span>R$ ${tLj.toFixed(2)}</span></div>`;
         }
 
         function alternarStatus(id, sA, col) { db.collection(col).doc(id).update({ status: sA === 'Pago' ? 'Em Aberto' : 'Pago' }); }
         function reabrir(id) { const it = hGeral.find(x => x.id === id); if(it) { db.collection("caixa").add(it).then(() => db.collection("relatorio").doc(id).delete()); mudar(1); } }
-        
+
+        function filtrar() {
+            const termo = document.getElementById('busca').value.toLowerCase();
+            const dIni = document.getElementById('dataInicioFiltro').value;
+            const dFim = document.getElementById('dataFimFiltro').value;
+            
+            window.filtrados = hGeral.filter(i => {
+                const dataISO = i.dataISO || i.data.toDate().toISOString().split('T')[0];
+                const bateData = (!dIni || dataISO >= dIni) && (!dFim || dataISO <= dFim);
+                const bateTexto = i.desc.toLowerCase().includes(termo) || (i.os && i.os.includes(termo));
+                return bateData && bateTexto;
+            });
+            renderHist(window.filtrados);
+        }
+
         function renderHist(dados) {
             const l = document.getElementById('listaHist'); l.innerHTML = '';
             dados.forEach(i => {
@@ -273,17 +279,35 @@
             });
         }
 
+        function gerarRelatorioFiltrado() {
+            let dados = window.filtrados || [];
+            if(dados.length === 0) return alert("Nenhum dado no filtro!");
+            let b=0, m3d=0, invest=0, loja=0, lucas=0, leo=0, dan=0;
+            dados.forEach(i => {
+                let vV = i.venda || 0, vC = i.custo || 0;
+                let isLucasVendedor = (i.vendedor === 'LUCAS');
+                if (i.status === 'Pago') {
+                    if(i.origem === 'Leo') { m3d += vC; b += vV; } else { b += vV; invest += vC; }
+                    let tx = i.tipo === "Serviço" ? vV * (configGlobal.lojaServ/100) : vV * (configGlobal.lojaProd/100);
+                    loja += tx; let luc = vV - tx - vC;
+                    if(i.tipo === "Serviço") { let pLc = isLucasVendedor ? luc * (configGlobal.lucasServ/100) : 0; lucas += pLc; leo += (luc-pLc)*0.6; dan += (luc-pLc)*0.4; }
+                    else { let pLc = isLucasVendedor ? luc * (configGlobal.lucasProd/100) : 0; lucas += pLc; leo += (luc-pLc)*0.5; dan += (luc-pLc)*0.5; }
+                }
+            });
+            document.getElementById('corpoRelatorio').innerHTML = `<b>Bruto:</b> R$ ${b.toFixed(2)}<br><b>3D LÉO:</b> R$ ${m3d.toFixed(2)}<br><b>Reinvestir Loja:</b> R$ ${invest.toFixed(2)}<hr><b>Léo:</b> R$ ${leo.toFixed(2)}<br><b>Daniel:</b> R$ ${dan.toFixed(2)}<br><b>Japão:</b> R$ ${lucas.toFixed(2)}<br><b>Taxa Loja:</b> R$ ${loja.toFixed(2)}`;
+            document.getElementById('areaRelatorio').style.display = 'block';
+        }
+
         function toggleCategoria(id) {
             const content = document.getElementById('cont-' + id);
             const icon = document.getElementById('icon-' + id);
-            if (content.style.display === 'block') { content.style.display = 'none'; icon.innerText = '▼'; }
-            else { content.style.display = 'block'; icon.innerText = '▲'; }
+            content.style.display = (content.style.display === 'block') ? 'none' : 'block';
+            icon.innerText = (content.style.display === 'block') ? '▲' : '▼';
         }
 
         function renderEstoqueList() {
-            const container = document.getElementById('listaEstoqueAgrupada');
-            container.innerHTML = '';
-            const categorias = [{ id: 'Leo3D', nome: '🎨 3D Léo', icon: '🎨' }, { id: 'Serviço', nome: '🔧 Uso em Serviço', icon: '🔧' }, { id: 'Produto', nome: '📦 Venda Direta', icon: '📦' }];
+            const container = document.getElementById('listaEstoqueAgrupada'); container.innerHTML = '';
+            const categorias = [{ id: 'Leo3D', nome: '🎨 3D Léo' }, { id: 'Serviço', nome: '🔧 Uso em Serviço' }, { id: 'Produto', nome: '📦 Venda Direta' }];
             categorias.forEach(cat => {
                 const itensCat = pEstoque.filter(p => p.categoria === cat.id).sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1));
                 if (itensCat.length > 0) {
@@ -306,27 +330,8 @@
 
         function cancelarEdicaoPeca() { document.getElementById('editPecaId').value = ''; document.getElementById('nProd').value = ''; document.getElementById('cProd').value = ''; document.getElementById('vSug').value = ''; document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE"; document.getElementById('btnCancelarEdit').style.display = 'none'; }
         function mudar(n) { const ids=['aba1','aba2','aba3','aba4']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
-        function filtrar() { const t=document.getElementById('busca').value.toLowerCase(); renderHist(hGeral.filter(i=>i.desc.toLowerCase().includes(t))); }
         function arquivar() { if(confirm("Arquivar?")) db.collection("caixa").get().then(s=>s.forEach(d=>{ db.collection("relatorio").add(d.data()); db.collection("caixa").doc(d.id).delete(); })); }
         function salvarConfig() { db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value), lucasServ: parseFloat(document.getElementById('cfgLucasServ').value), lucasProd: parseFloat(document.getElementById('cfgLucasProd').value), lojaProd: parseFloat(document.getElementById('cfgLojaProd').value) }).then(()=>alert("Taxas Salvas!")); }
-        function gerarRelatorioHist() {
-            let dados = window.filtrados || hGeral;
-            let b=0, m3d=0, invest=0, loja=0, lucas=0, leo=0, dan=0;
-            dados.forEach(i => {
-                let vV = i.venda || 0, vC = i.custo || 0;
-                let isLucasVendedor = (i.vendedor === 'LUCAS');
-                if (i.status === 'Pago') {
-                    if(i.origem === 'Leo') { m3d += vC; b += vV; } else { b += vV; invest += vC; }
-                    let tx = i.tipo === "Serviço" ? vV * (configGlobal.lojaServ/100) : vV * (configGlobal.lojaProd/100);
-                    loja += tx; let luc = vV - tx - vC;
-                    if(i.tipo === "Serviço") { let pLc = isLucasVendedor ? luc * (configGlobal.lucasServ/100) : 0; lucas += pLc; leo += (luc-pLc)*0.6; dan += (luc-pLc)*0.4; }
-                    else { let pLc = isLucasVendedor ? luc * (configGlobal.lucasProd/100) : 0; lucas += pLc; leo += (luc-pLc)*0.5; dan += (luc-pLc)*0.5; }
-                }
-            });
-            let html = `<b>Bruto:</b> R$ ${b.toFixed(2)}<br><b>3D LÉO (Custo):</b> R$ ${m3d.toFixed(2)}<br><b>Reinvestir Loja:</b> R$ ${invest.toFixed(2)}<hr style="border-color:#333;"><b>Léo:</b> R$ ${leo.toFixed(2)}<br><b>Daniel:</b> R$ ${dan.toFixed(2)}<br><b>Japão:</b> R$ ${lucas.toFixed(2)}<br><b>Taxa Loja:</b> R$ ${loja.toFixed(2)}`;
-            document.getElementById('corpoRelatorio').innerHTML = html;
-            document.getElementById('areaRelatorio').style.display = 'block';
-        }
     </script>
 </body>
 </html>
