@@ -69,9 +69,9 @@
             </div>
             <div id="aba2" style="display:none;">
                 <div class="card">
-                    <div style="display:flex; gap:5px;"><input type="date" id="dataInicioFiltro"><input type="date" id="dataFimFiltro"></div>
+                    <div style="display:flex; gap:5px;"><input type="date" id="dataInicioFiltro" onchange="filtrar()"><input type="date" id="dataFimFiltro" onchange="filtrar()"></div>
                     <input type="text" id="busca" placeholder="🔍 Filtrar..." onkeyup="filtrar()">
-                    <button class="btn" style="background:var(--blue); color:white;" onclick="gerarRelatorioFiltrado()">📊 GERAR RELATÓRIO</button>
+                    <button class="btn" style="background:var(--blue); color:white;" onclick="gerarRelatorioFiltrado()">📊 GERAR RELATÓRIO DO FILTRO</button>
                 </div>
                 <div id="areaRelatorio" class="card" style="display:none; border-color:var(--blue);"><div id="corpoRelatorio"></div><button class="btn" onclick="document.getElementById('areaRelatorio').style.display='none'">FECHAR</button></div>
                 <div id="listaHist"></div>
@@ -134,7 +134,7 @@
             if(s.value) { const opt = s.options[s.selectedIndex]; document.getElementById('desc').value = opt.getAttribute('data-nome'); document.getElementById('cust').value = s.value; document.getElementById('vend').value = opt.getAttribute('data-venda'); }
         }
         function lancar() {
-            const id = document.getElementById('editCaixaId').value; const s = document.getElementById('selectPeca'); const cat = s.options[s.selectedIndex]?.getAttribute('data-cat') || "Loja"; const pecaId = s.options[s.selectedIndex]?.getAttribute('data-id');
+            const id = document.getElementById('editCaixaId').value; const s = document.getElementById('selectPeca'); const opt = s.options[s.selectedIndex]; const cat = opt?.getAttribute('data-cat') || "Loja"; const pecaId = opt?.getAttribute('data-id');
             const v = { tipo: document.getElementById('tVenda').value, status: document.getElementById('statusVenda').value, os: document.getElementById('osNum').value, desc: document.getElementById('desc').value, venda: parseFloat(document.getElementById('vend').value), custo: parseFloat(document.getElementById('cust').value)||0, vendedor: document.getElementById('vendedorVenda').value, data: firebase.firestore.Timestamp.now(), dataFormatada: new Date().toLocaleDateString('pt-BR'), dataISO: new Date().toISOString().split('T')[0], origem: cat === "Leo3D" ? "Leo" : "Daniel" };
             if(id) { db.collection("caixa").doc(id).update(v).then(() => cancelarEdicaoCaixa()); }
             else { db.collection("caixa").add(v).then(() => { if(pecaId) db.collection("estoque").doc(pecaId).update({qtd: firebase.firestore.FieldValue.increment(-1)}); }); document.getElementById('osNum').value=''; document.getElementById('desc').value=''; document.getElementById('vend').value=''; document.getElementById('cust').value=''; }
@@ -159,10 +159,21 @@
         function alternarStatus(id, sA, col) { db.collection(col).doc(id).update({ status: sA === 'Pago' ? 'Em Aberto' : 'Pago' }); }
         function prepararEdicaoCaixa(id) { const i = cAtual.find(x => x.id === id); document.getElementById('editCaixaId').value = id; document.getElementById('tVenda').value = i.tipo; document.getElementById('osNum').value = i.os || ''; document.getElementById('desc').value = i.desc; document.getElementById('vend').value = i.venda; document.getElementById('cust').value = ehLucas ? 0 : i.custo; document.getElementById('vendedorVenda').value = i.vendedor; document.getElementById('tituloCaixa').innerText = "✏️ EDITAR"; document.getElementById('btnCancelarCaixa').style.display = 'block'; window.scrollTo(0,0); }
         function cancelarEdicaoCaixa() { document.getElementById('editCaixaId').value = ''; document.getElementById('tituloCaixa').innerText = "➕ LANÇAR"; document.getElementById('btnCancelarCaixa').style.display = 'none'; }
+        
         function filtrar() {
-            const t = document.getElementById('busca').value.toLowerCase(); const dI = document.getElementById('dataInicioFiltro').value; const dF = document.getElementById('dataFimFiltro').value;
-            window.filtrados = hGeral.filter(i => { const dISO = i.dataISO || (i.data ? i.data.toDate().toISOString().split('T')[0] : ''); return (!dI || dISO >= dI) && (!dF || dISO <= dF) && (i.desc.toLowerCase().includes(t) || (i.os && i.os.includes(t))); }); renderHist(window.filtrados);
+            const t = document.getElementById('busca').value.toLowerCase(); 
+            const dI = document.getElementById('dataInicioFiltro').value; 
+            const dF = document.getElementById('dataFimFiltro').value;
+            window.filtrados = hGeral.filter(i => { 
+                let dISO = i.dataISO;
+                if(!dISO && i.data) { try { dISO = i.data.toDate().toISOString().split('T')[0]; } catch(e) { dISO = ''; } }
+                const bateData = (!dI || dISO >= dI) && (!dF || dISO <= dF);
+                const bateTexto = i.desc.toLowerCase().includes(t) || (i.os && i.os.includes(t));
+                return bateData && bateTexto; 
+            }); 
+            renderHist(window.filtrados);
         }
+
         function renderHist(dados) {
             const l = document.getElementById('listaHist'); l.innerHTML = '';
             dados.forEach(i => l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;"><button class="btn-icon" style="color:var(--yellow);" onclick="reabrir('${i.id}')">📤</button><button class="btn-icon" style="color:${(i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)'};" onclick="alternarStatus('${i.id}', '${i.status}', 'relatorio')">💲</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Apagar do histórico?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada} [${i.status.toUpperCase()}]</small><br>${i.os ? `<span class="tag-os">OS ${i.os}</span>` : ""}<b>${i.desc}</b> <small>[${i.vendedor||'LEO'}]</small><br><small>R$ ${(i.venda||0).toFixed(2)}</small></div>`);
@@ -182,8 +193,10 @@
         function mudar(n) { const ids=['aba1','aba2','aba3','aba4']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
         function arquivar() { if(confirm("Arquivar?")) db.collection("caixa").get().then(s=>s.forEach(d=>{ db.collection("relatorio").add(d.data()); db.collection("caixa").doc(d.id).delete(); })); }
         function salvarConfig() { db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value), lucasServ: parseFloat(document.getElementById('cfgLucasServ').value), lucasProd: parseFloat(document.getElementById('cfgLucasProd').value), lojaProd: parseFloat(document.getElementById('cfgLojaProd').value) }).then(()=>alert("Taxas Salvas!")); }
+        
         function gerarRelatorioFiltrado() {
-            let dados = window.filtrados || []; if(dados.length === 0) return alert("Nada no filtro!");
+            let dados = window.filtrados || []; 
+            if(dados.length === 0) return alert("Nada no filtro!");
             let b=0, m3d=0, invest=0, loja=0, lucas=0, leo=0, dan=0;
             dados.forEach(i => {
                 let vV = i.venda || 0, vC = i.custo || 0, isLucas = (i.vendedor === 'LUCAS');
@@ -195,7 +208,7 @@
                     else { let pLc = isLucas ? luc * (configGlobal.lucasProd/100) : 0; lucas += pLc; leo += (luc-pLc)*0.5; dan += (luc-pLc)*0.5; }
                 }
             });
-            let html = ehLucas ? `<b>MINHA COMISSÃO:</b> R$ ${lucas.toFixed(2)}` : `<b>Bruto:</b> R$ ${b.toFixed(2)}<hr><b>Léo:</b> R$ ${leo.toFixed(2)}<br><b>Daniel:</b> R$ ${dan.toFixed(2)}<br><b>Japão:</b> R$ ${lucas.toFixed(2)}<br><b>Taxa Loja:</b> R$ ${loja.toFixed(2)}`;
+            let html = ehLucas ? `<b>MINHA COMISSÃO:</b> R$ ${lucas.toFixed(2)}` : `<b>Bruto:</b> R$ ${b.toFixed(2)}<br><b>3D LÉO:</b> R$ ${m3d.toFixed(2)}<br><b>Reinvestir Loja:</b> R$ ${invest.toFixed(2)}<hr><b>Léo:</b> R$ ${leo.toFixed(2)}<br><b>Daniel:</b> R$ ${dan.toFixed(2)}<br><b>Japão:</b> R$ ${lucas.toFixed(2)}<br><b>Taxa Loja:</b> R$ ${loja.toFixed(2)}`;
             document.getElementById('corpoRelatorio').innerHTML = html; document.getElementById('areaRelatorio').style.display = 'block';
         }
     </script>
