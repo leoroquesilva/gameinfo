@@ -36,24 +36,20 @@
             <input type="password" id="passLogin" placeholder="Senha">
             <button class="btn" onclick="loginFirebase()">Entrar</button>
         </div>
-
         <div id="screenApp" class="screen">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <span style="font-size:0.7rem;">Olá, <b id="uAtivo" style="color:var(--yellow)">-</b></span>
                 <button onclick="auth.signOut().then(()=>location.reload())" style="background:none; border:none; color:var(--red); font-weight:bold; cursor:pointer;">SAIR</button>
             </div>
-            
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <h2 style="margin:0; font-size:1.4rem;">GAME INFO 🎮</h2>
                 <button id="btnConfig" style="background:none; border:none; color:var(--yellow); font-size:1.6rem; cursor:pointer;" onclick="mudar(4)">⚙️</button>
             </div>
-
             <div class="tab-menu">
                 <button class="btn-tab active-tab" id="t1" onclick="mudar(1)">CAIXA</button>
                 <button class="btn-tab" id="t2" onclick="mudar(2)">HISTÓRICO</button>
                 <button class="btn-tab" id="t3" onclick="mudar(3)">ESTOQUE</button>
             </div>
-
             <div id="aba1">
                 <div class="card">
                     <h2 id="tituloCaixa" style="font-size: 1rem; color: var(--yellow); margin-bottom: 5px;">➕ LANÇAR</h2>
@@ -61,277 +57,147 @@
                     <select id="tVenda" onchange="renderEstoqueDropdown()"><option value="Serviço">🔧 Serviço</option><option value="Produto">📦 Produto</option></select>
                     <select id="statusVenda"><option value="Pago">✅ Pago</option><option value="Em Aberto">⏳ Em Aberto</option></select>
                     <select id="selectPeca" onchange="carregarPeca()"></select>
-                    <div style="display:flex; gap:8px;">
-                        <input type="text" id="osNum" placeholder="Nº O.S." style="flex: 1;">
-                        <input type="text" id="desc" placeholder="Descrição/Cliente" style="flex: 2;">
-                    </div>
-                    <div style="display:flex; gap:8px;">
-                        <input type="number" id="cust" placeholder="Custo R$">
-                        <input type="number" id="vend" placeholder="Venda R$">
-                    </div>
-                    <select id="vendedorVenda">
-                        <option value="LEO">Vendedor: LÉO</option>
-                        <option value="DANIEL">Vendedor: DANIEL</option>
-                        <option value="LUCAS">Vendedor: LUCAS (JAPÃO)</option>
-                    </select>
+                    <div style="display:flex; gap:8px;"><input type="text" id="osNum" placeholder="Nº O.S." style="flex: 1;"><input type="text" id="desc" placeholder="Descrição/Cliente" style="flex: 2;"></div>
+                    <div style="display:flex; gap:8px;"><input type="number" id="cust" placeholder="Custo R$"><input type="number" id="vend" placeholder="Venda R$"></div>
+                    <select id="vendedorVenda"><option value="LEO">Vendedor: LÉO</option><option value="DANIEL">Vendedor: DANIEL</option><option value="LUCAS">Vendedor: LUCAS (JAPÃO)</option></select>
                     <button id="btnLancar" class="btn" onclick="lancar()">Lançar</button>
-                    <button id="btnCancelarCaixa" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoCaixa()">Cancelar Edição</button>
+                    <button id="btnCancelarCaixa" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoCaixa()">Cancelar</button>
                 </div>
                 <div id="gridValores" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;"></div>
                 <div id="listaCaixa" style="max-height:300px; overflow-y:auto;"></div>
-                <button class="btn" style="background:#222; color:white;" onclick="arquivar()">Fechar Dia (Arquivar)</button>
+                <button id="btnArq" class="btn" style="background:#222; color:white;" onclick="arquivar()">Fechar Dia (Arquivar)</button>
             </div>
-
             <div id="aba2" style="display:none;">
                 <div class="card">
-                    <h3 style="color:var(--yellow); margin-top:0; font-size:1rem;">📅 FILTRAR PERÍODO</h3>
-                    <div style="display:flex; gap:5px;">
-                        <input type="date" id="dataInicioFiltro" style="font-size:0.8rem;">
-                        <input type="date" id="dataFimFiltro" style="font-size:0.8rem;">
-                    </div>
-                    <input type="text" id="busca" placeholder="🔍 Filtrar por O.S. ou Descrição..." onkeyup="filtrar()">
-                    <button class="btn" style="background:var(--blue); color:white;" onclick="gerarRelatorioFiltrado()">📊 GERAR RELATÓRIO DO FILTRO</button>
+                    <div style="display:flex; gap:5px;"><input type="date" id="dataInicioFiltro"><input type="date" id="dataFimFiltro"></div>
+                    <input type="text" id="busca" placeholder="🔍 Filtrar..." onkeyup="filtrar()">
+                    <button class="btn" style="background:var(--blue); color:white;" onclick="gerarRelatorioFiltrado()">📊 GERAR RELATÓRIO</button>
                 </div>
-                <div id="areaRelatorio" class="card" style="display:none; border-color:var(--blue);">
-                    <div id="corpoRelatorio"></div>
-                    <button class="btn" onclick="document.getElementById('areaRelatorio').style.display='none'">FECHAR</button>
-                </div>
+                <div id="areaRelatorio" class="card" style="display:none; border-color:var(--blue);"><div id="corpoRelatorio"></div><button class="btn" onclick="document.getElementById('areaRelatorio').style.display='none'">FECHAR</button></div>
                 <div id="listaHist"></div>
             </div>
-
             <div id="aba3" style="display:none;">
-                <div class="card">
+                <div class="card" id="formEstoque">
                     <h2 id="tituloEstoque">➕ ESTOQUE</h2>
-                    <input type="hidden" id="editPecaId">
-                    <input type="text" id="nProd" placeholder="Peça / Jogo">
-                    <div style="display:flex; gap:8px;">
-                        <input type="number" id="cProd" placeholder="Custo">
-                        <input type="number" id="vSug" placeholder="Venda Sugerida">
-                    </div>
+                    <input type="hidden" id="editPecaId"><input type="text" id="nProd" placeholder="Peça / Jogo">
+                    <div style="display:flex; gap:8px;"><input type="number" id="cProd" placeholder="Custo"><input type="number" id="vSug" placeholder="Venda Sugerida"></div>
                     <input type="number" id="qProd" placeholder="Quantidade" value="1">
-                    <select id="catProd">
-                        <option value="Leo3D">🎨 Produto/Serviço 3D (Léo)</option>
-                        <option value="Serviço">🔧 Uso em Serviço (Loja)</option>
-                        <option value="Produto">📦 Venda Direta (Loja)</option>
-                    </select>
-                    <div style="display:flex; align-items:center; gap:10px; margin: 10px 0;">
-                        <input type="checkbox" id="favProd" style="width:20px; margin:0;"> 
-                        <label for="favProd" style="color:var(--yellow); font-size:0.9rem;">⭐ DEIXAR NO TOPO</label>
-                    </div>
+                    <select id="catProd"><option value="Leo3D">🎨 3D Léo</option><option value="Serviço">🔧 Uso em Serviço</option><option value="Produto">📦 Venda Direta</option></select>
+                    <div style="display:flex; align-items:center; gap:10px; margin: 10px 0;"><input type="checkbox" id="favProd" style="width:20px; margin:0;"><label for="favProd" style="color:var(--yellow); font-size:0.9rem;">⭐ FAVORITO</label></div>
                     <button id="btnSalvarEstoque" class="btn" onclick="addEstoque()">Salvar</button>
                     <button id="btnCancelarEdit" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoPeca()">Cancelar</button>
                 </div>
                 <div id="listaEstoqueAgrupada"></div>
             </div>
-
             <div id="aba4" style="display:none;">
                 <div class="card">
                     <h2>⚙️ TAXAS</h2>
                     <label>Loja % Serv</label><input type="number" id="cfgLojaServ">
                     <label>Lucas % Serv</label><input type="number" id="cfgLucasServ">
-                    <hr>
-                    <label>Loja % Prod</label><input type="number" id="cfgLojaProd">
+                    <hr><label>Loja % Prod</label><input type="number" id="cfgLojaProd">
                     <label>Lucas % Prod</label><input type="number" id="cfgLucasProd">
                     <button class="btn" onclick="salvarConfig()">Salvar</button>
                 </div>
             </div>
         </div>
     </div>
-
     <script>
         const firebaseConfig = { apiKey: "AIzaSyCmSqPQ40Emwzu2MDMH_0AxAhkElutWkok", authDomain: "gameinfogestao.firebaseapp.com", projectId: "gameinfogestao", storageBucket: "gameinfogestao.firebasestorage.app", messagingSenderId: "289347667383", appId: "1:289347667383:web:d6e19796f630e5fcaf5432" };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore(); const auth = firebase.auth();
-        let userN = "", hGeral = [], configGlobal = { lojaServ: 10, lucasServ: 30, lucasProd: 15, lojaProd: 0 }, pEstoque = [], cAtual = [];
-
+        let userN = "", hGeral = [], configGlobal = { lojaServ: 10, lucasServ: 30, lucasProd: 15, lojaProd: 0 }, pEstoque = [], cAtual = [], ehLucas = false;
         auth.onAuthStateChanged(u => {
             if(u) {
-                userN = u.email.split('@')[0].toUpperCase();
+                userN = u.email.split('@')[0].toUpperCase(); ehLucas = userN.includes('LUCAS') || userN.includes('JAPAO');
                 document.getElementById('uAtivo').innerText = userN;
-                document.getElementById('screenLogin').classList.remove('active');
-                document.getElementById('screenApp').classList.add('active');
-                const selVend = document.getElementById('vendedorVenda');
-                if(userN.includes('LUCAS') || userN.includes('JAPAO')) selVend.value = 'LUCAS';
-                else if(userN.includes('DANIEL')) selVend.value = 'DANIEL';
-                else selVend.value = 'LEO';
-                sinc();
+                document.getElementById('screenLogin').classList.remove('active'); document.getElementById('screenApp').classList.add('active');
+                if(ehLucas) { document.getElementById('btnConfig').style.display = 'none'; document.getElementById('btnArq').style.display = 'none'; document.getElementById('formEstoque').style.display = 'none'; }
+                document.getElementById('vendedorVenda').value = ehLucas ? 'LUCAS' : 'LEO'; sinc();
             } else { document.getElementById('screenLogin').classList.add('active'); document.getElementById('screenApp').classList.remove('active'); }
         });
-
         function loginFirebase() { auth.signInWithEmailAndPassword(document.getElementById('emailLogin').value, document.getElementById('passLogin').value); }
-
         function sinc() {
             db.collection("config").doc("geral").onSnapshot(doc => { if(doc.exists) configGlobal = doc.data(); });
             db.collection("caixa").orderBy("data","desc").onSnapshot(s => { cAtual = []; s.forEach(d => cAtual.push({...d.data(), id: d.id})); renderCaixa(cAtual); });
             db.collection("relatorio").orderBy("data","desc").onSnapshot(s => { hGeral = []; s.forEach(d => hGeral.push({...d.data(), id: d.id})); filtrar(); });
             db.collection("estoque").onSnapshot(s => { pEstoque = []; s.forEach(d => pEstoque.push({...d.data(), id: d.id})); renderEstoqueList(); renderEstoqueDropdown(); });
         }
-
         function renderEstoqueDropdown() {
-            const sel = document.getElementById('selectPeca');
-            const tipo = document.getElementById('tVenda').value;
-            sel.innerHTML = '<option value="">-- Selecionar Peça / Serviço --</option>';
+            const sel = document.getElementById('selectPeca'); const tipo = document.getElementById('tVenda').value;
+            sel.innerHTML = '<option value="">-- Selecionar --</option>';
             pEstoque.filter(p => tipo === "Serviço" ? (p.categoria === "Serviço" || p.categoria === "Leo3D") : (p.categoria === "Produto" || p.categoria === "Leo3D"))
             .sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1))
-            .forEach(p => sel.innerHTML += `<option value="${p.custo}" data-venda="${p.vendaSugerida || ''}" data-nome="${p.nome}" data-qtd="${p.qtd}" data-id="${p.id}" data-cat="${p.categoria}">${p.favorito ? '⭐ ' : ''}${p.nome}</option>`);
+            .forEach(p => sel.innerHTML += `<option value="${p.custo}" data-venda="${p.vendaSugerida || ''}" data-nome="${p.nome}" data-id="${p.id}" data-cat="${p.categoria}">${p.favorito ? '⭐ ' : ''}${p.nome}</option>`);
         }
-
         function carregarPeca() {
             const s = document.getElementById('selectPeca');
-            if(s.value) {
-                const opt = s.options[s.selectedIndex];
-                document.getElementById('desc').value = opt.getAttribute('data-nome');
-                document.getElementById('cust').value = s.value;
-                document.getElementById('vend').value = opt.getAttribute('data-venda');
-            }
+            if(s.value) { const opt = s.options[s.selectedIndex]; document.getElementById('desc').value = opt.getAttribute('data-nome'); document.getElementById('cust').value = s.value; document.getElementById('vend').value = opt.getAttribute('data-venda'); }
         }
-
         function lancar() {
-            const id = document.getElementById('editCaixaId').value;
-            const s = document.getElementById('selectPeca');
-            const cat = s.options[s.selectedIndex]?.getAttribute('data-cat') || "Loja";
-            const pecaId = s.options[s.selectedIndex]?.getAttribute('data-id');
-            const v = { 
-                tipo: document.getElementById('tVenda').value, status: document.getElementById('statusVenda').value, 
-                os: document.getElementById('osNum').value, desc: document.getElementById('desc').value,
-                venda: parseFloat(document.getElementById('vend').value), custo: parseFloat(document.getElementById('cust').value)||0,
-                vendedor: document.getElementById('vendedorVenda').value, loginAtivo: userN,
-                data: firebase.firestore.Timestamp.now(), dataFormatada: new Date().toLocaleDateString('pt-BR'),
-                dataISO: new Date().toISOString().split('T')[0],
-                origem: cat === "Leo3D" ? "Leo" : "Daniel"
-            };
+            const id = document.getElementById('editCaixaId').value; const s = document.getElementById('selectPeca'); const cat = s.options[s.selectedIndex]?.getAttribute('data-cat') || "Loja"; const pecaId = s.options[s.selectedIndex]?.getAttribute('data-id');
+            const v = { tipo: document.getElementById('tVenda').value, status: document.getElementById('statusVenda').value, os: document.getElementById('osNum').value, desc: document.getElementById('desc').value, venda: parseFloat(document.getElementById('vend').value), custo: parseFloat(document.getElementById('cust').value)||0, vendedor: document.getElementById('vendedorVenda').value, data: firebase.firestore.Timestamp.now(), dataFormatada: new Date().toLocaleDateString('pt-BR'), dataISO: new Date().toISOString().split('T')[0], origem: cat === "Leo3D" ? "Leo" : "Daniel" };
             if(id) { db.collection("caixa").doc(id).update(v).then(() => cancelarEdicaoCaixa()); }
-            else { db.collection("caixa").add(v).then(() => { if(pecaId) db.collection("estoque").doc(pecaId).update({qtd: firebase.firestore.FieldValue.increment(-1)}); });
-                document.getElementById('osNum').value=''; document.getElementById('desc').value=''; document.getElementById('vend').value=''; document.getElementById('cust').value=''; }
+            else { db.collection("caixa").add(v).then(() => { if(pecaId) db.collection("estoque").doc(pecaId).update({qtd: firebase.firestore.FieldValue.increment(-1)}); }); document.getElementById('osNum').value=''; document.getElementById('desc').value=''; document.getElementById('vend').value=''; document.getElementById('cust').value=''; }
         }
-
-        function prepararEdicaoCaixa(id) {
-            const i = cAtual.find(x => x.id === id);
-            document.getElementById('editCaixaId').value = id;
-            document.getElementById('tVenda').value = i.tipo;
-            document.getElementById('statusVenda').value = i.status;
-            document.getElementById('osNum').value = i.os || '';
-            document.getElementById('desc').value = i.desc;
-            document.getElementById('vend').value = i.venda;
-            document.getElementById('cust').value = i.custo;
-            document.getElementById('vendedorVenda').value = i.vendedor || 'LEO';
-            document.getElementById('tituloCaixa').innerText = "✏️ EDITAR LANÇAMENTO";
-            document.getElementById('btnLancar').innerText = "ATUALIZAR";
-            document.getElementById('btnCancelarCaixa').style.display = 'block';
-            window.scrollTo(0,0);
-        }
-
-        function cancelarEdicaoCaixa() {
-            document.getElementById('editCaixaId').value = '';
-            document.getElementById('osNum').value = '';
-            document.getElementById('desc').value = '';
-            document.getElementById('vend').value = '';
-            document.getElementById('cust').value = '';
-            document.getElementById('tituloCaixa').innerText = "➕ LANÇAR";
-            document.getElementById('btnLancar').innerText = "Lançar";
-            document.getElementById('btnCancelarCaixa').style.display = 'none';
-        }
-
         function renderCaixa(items) {
-            const l = document.getElementById('listaCaixa'); l.innerHTML = '';
-            let tLeo=0, tDan=0, tLc=0, tLj=0, tInvLoja=0, t3DLeoCusto=0;
+            const l = document.getElementById('listaCaixa'); l.innerHTML = ''; let tLeo=0, tDan=0, tLc=0, tLj=0, tInvLoja=0, t3DLeoCusto=0;
             items.forEach(i => {
-                let vV = i.venda || 0, vC = i.custo || 0;
-                let isLucasVendedor = (i.vendedor === 'LUCAS');
+                let vV = i.venda || 0, vC = i.custo || 0, isLucas = (i.vendedor === 'LUCAS');
                 if (i.status === 'Pago') {
                     if(i.origem === 'Leo') { t3DLeoCusto += vC; } else { tInvLoja += vC; }
                     let tx = i.tipo === "Serviço" ? vV * (configGlobal.lojaServ/100) : vV * (configGlobal.lojaProd/100);
                     tLj += tx; let luc = vV - tx - vC;
-                    if(i.tipo === "Serviço") { let pLc = isLucasVendedor ? luc * (configGlobal.lucasServ/100) : 0; tLc += pLc; tLeo += (luc-pLc)*0.6; tDan += (luc-pLc)*0.4; }
-                    else { let pLc = isLucasVendedor ? luc * (configGlobal.lucasProd/100) : 0; tLc += pLc; tLeo += (luc-pLc)*0.5; tDan += (luc-pLc)*0.5; }
+                    if(i.tipo === "Serviço") { let pLc = isLucas ? luc * (configGlobal.lucasServ/100) : 0; tLc += pLc; tLeo += (luc-pLc)*0.6; tDan += (luc-pLc)*0.4; }
+                    else { let pLc = isLucas ? luc * (configGlobal.lucasProd/100) : 0; tLc += pLc; tLeo += (luc-pLc)*0.5; tDan += (luc-pLc)*0.5; }
                 }
-                let corB = i.origem === 'Leo' ? 'var(--purple)' : (i.tipo === 'Serviço' ? '#0088ff' : '#22c55e');
-                let corS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
-                let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : "";
-                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)}</small></div>`;
+                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${i.origem === 'Leo' ? 'var(--purple)' : (i.tipo === 'Serviço' ? '#0088ff' : '#22c55e')}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoCaixa('${i.id}')">✏️</button><button class="btn-icon" style="color:${(i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)'};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Apagar venda?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${i.os ? `<span class="tag-os">OS ${i.os}</span>` : ""}<b>${i.desc}</b> <small>[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} ${ehLucas ? '' : '| C: R$ '+vC.toFixed(2)}</small></div>`;
             });
-            document.getElementById('gridValores').innerHTML = `<div class="item-resumo" style="border-color:var(--purple)">3D LÉO<span>R$ ${t3DLeoCusto.toFixed(2)}</span></div><div class="item-resumo">LÉO (Sócio)<span>R$ ${tLeo.toFixed(2)}</span></div><div class="item-resumo">DANIEL (Sócio)<span>R$ ${tDan.toFixed(2)}</span></div><div class="item-resumo">JAPÃO (Comissão)<span>R$ ${tLc.toFixed(2)}</span></div><div class="item-resumo">REINVESTIR LOJA<span>R$ ${tInvLoja.toFixed(2)}</span></div><div class="item-resumo">TAXA LOJA<span>R$ ${tLj.toFixed(2)}</span></div>`;
+            const grid = document.getElementById('gridValores');
+            if(ehLucas) grid.innerHTML = `<div class="item-resumo" style="grid-column: span 2; border-color:var(--green)">MINHA COMISSÃO<span>R$ ${tLc.toFixed(2)}</span></div>`;
+            else grid.innerHTML = `<div class="item-resumo" style="border-color:var(--purple)">3D LÉO<span>R$ ${t3DLeoCusto.toFixed(2)}</span></div><div class="item-resumo">LÉO<span>R$ ${tLeo.toFixed(2)}</span></div><div class="item-resumo">DANIEL<span>R$ ${tDan.toFixed(2)}</span></div><div class="item-resumo">JAPÃO<span>R$ ${tLc.toFixed(2)}</span></div><div class="item-resumo">REINVESTIR<span>R$ ${tInvLoja.toFixed(2)}</span></div><div class="item-resumo">TAXA LOJA<span>R$ ${tLj.toFixed(2)}</span></div>`;
         }
-
         function alternarStatus(id, sA, col) { db.collection(col).doc(id).update({ status: sA === 'Pago' ? 'Em Aberto' : 'Pago' }); }
-        function reabrir(id) { const it = hGeral.find(x => x.id === id); if(it) { db.collection("caixa").add(it).then(() => db.collection("relatorio").doc(id).delete()); mudar(1); } }
-
+        function prepararEdicaoCaixa(id) { const i = cAtual.find(x => x.id === id); document.getElementById('editCaixaId').value = id; document.getElementById('tVenda').value = i.tipo; document.getElementById('osNum').value = i.os || ''; document.getElementById('desc').value = i.desc; document.getElementById('vend').value = i.venda; document.getElementById('cust').value = ehLucas ? 0 : i.custo; document.getElementById('vendedorVenda').value = i.vendedor; document.getElementById('tituloCaixa').innerText = "✏️ EDITAR"; document.getElementById('btnCancelarCaixa').style.display = 'block'; window.scrollTo(0,0); }
+        function cancelarEdicaoCaixa() { document.getElementById('editCaixaId').value = ''; document.getElementById('tituloCaixa').innerText = "➕ LANÇAR"; document.getElementById('btnCancelarCaixa').style.display = 'none'; }
         function filtrar() {
-            const termo = document.getElementById('busca').value.toLowerCase();
-            const dIni = document.getElementById('dataInicioFiltro').value;
-            const dFim = document.getElementById('dataFimFiltro').value;
-            
-            window.filtrados = hGeral.filter(i => {
-                const dataISO = i.dataISO || i.data.toDate().toISOString().split('T')[0];
-                const bateData = (!dIni || dataISO >= dIni) && (!dFim || dataISO <= dFim);
-                const bateTexto = i.desc.toLowerCase().includes(termo) || (i.os && i.os.includes(termo));
-                return bateData && bateTexto;
-            });
-            renderHist(window.filtrados);
+            const t = document.getElementById('busca').value.toLowerCase(); const dI = document.getElementById('dataInicioFiltro').value; const dF = document.getElementById('dataFimFiltro').value;
+            window.filtrados = hGeral.filter(i => { const dISO = i.dataISO || (i.data ? i.data.toDate().toISOString().split('T')[0] : ''); return (!dI || dISO >= dI) && (!dF || dISO <= dF) && (i.desc.toLowerCase().includes(t) || (i.os && i.os.includes(t))); }); renderHist(window.filtrados);
         }
-
         function renderHist(dados) {
             const l = document.getElementById('listaHist'); l.innerHTML = '';
-            dados.forEach(i => {
-                let corS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
-                let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : "";
-                l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;"><button class="btn-icon" style="color:var(--yellow);" onclick="reabrir('${i.id}')">📤</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'relatorio')">💲</button></div><small>${i.dataFormatada} <span style="color:${corS}">[${i.status.toUpperCase()}]</span></small><br>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor || 'LEO'}]</small><br><small>R$ ${(i.venda||0).toFixed(2)}</small></div>`;
-            });
+            dados.forEach(i => l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;"><button class="btn-icon" style="color:var(--yellow);" onclick="reabrir('${i.id}')">📤</button><button class="btn-icon" style="color:${(i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)'};" onclick="alternarStatus('${i.id}', '${i.status}', 'relatorio')">💲</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Apagar do histórico?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada} [${i.status.toUpperCase()}]</small><br>${i.os ? `<span class="tag-os">OS ${i.os}</span>` : ""}<b>${i.desc}</b> <small>[${i.vendedor||'LEO'}]</small><br><small>R$ ${(i.venda||0).toFixed(2)}</small></div>`);
         }
-
-        function gerarRelatorioFiltrado() {
-            let dados = window.filtrados || [];
-            if(dados.length === 0) return alert("Nenhum dado no filtro!");
-            let b=0, m3d=0, invest=0, loja=0, lucas=0, leo=0, dan=0;
-            dados.forEach(i => {
-                let vV = i.venda || 0, vC = i.custo || 0;
-                let isLucasVendedor = (i.vendedor === 'LUCAS');
-                if (i.status === 'Pago') {
-                    if(i.origem === 'Leo') { m3d += vC; b += vV; } else { b += vV; invest += vC; }
-                    let tx = i.tipo === "Serviço" ? vV * (configGlobal.lojaServ/100) : vV * (configGlobal.lojaProd/100);
-                    loja += tx; let luc = vV - tx - vC;
-                    if(i.tipo === "Serviço") { let pLc = isLucasVendedor ? luc * (configGlobal.lucasServ/100) : 0; lucas += pLc; leo += (luc-pLc)*0.6; dan += (luc-pLc)*0.4; }
-                    else { let pLc = isLucasVendedor ? luc * (configGlobal.lucasProd/100) : 0; lucas += pLc; leo += (luc-pLc)*0.5; dan += (luc-pLc)*0.5; }
-                }
-            });
-            document.getElementById('corpoRelatorio').innerHTML = `<b>Bruto:</b> R$ ${b.toFixed(2)}<br><b>3D LÉO:</b> R$ ${m3d.toFixed(2)}<br><b>Reinvestir Loja:</b> R$ ${invest.toFixed(2)}<hr><b>Léo:</b> R$ ${leo.toFixed(2)}<br><b>Daniel:</b> R$ ${dan.toFixed(2)}<br><b>Japão:</b> R$ ${lucas.toFixed(2)}<br><b>Taxa Loja:</b> R$ ${loja.toFixed(2)}`;
-            document.getElementById('areaRelatorio').style.display = 'block';
-        }
-
-        function toggleCategoria(id) {
-            const content = document.getElementById('cont-' + id);
-            const icon = document.getElementById('icon-' + id);
-            content.style.display = (content.style.display === 'block') ? 'none' : 'block';
-            icon.innerText = (content.style.display === 'block') ? '▲' : '▼';
-        }
-
+        function reabrir(id) { const it = hGeral.find(x => x.id === id); if(it) { db.collection("caixa").add(it).then(() => db.collection("relatorio").doc(id).delete()); mudar(1); } }
         function renderEstoqueList() {
             const container = document.getElementById('listaEstoqueAgrupada'); container.innerHTML = '';
             const categorias = [{ id: 'Leo3D', nome: '🎨 3D Léo' }, { id: 'Serviço', nome: '🔧 Uso em Serviço' }, { id: 'Produto', nome: '📦 Venda Direta' }];
             categorias.forEach(cat => {
                 const itensCat = pEstoque.filter(p => p.categoria === cat.id).sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1));
                 if (itensCat.length > 0) {
-                    container.innerHTML += `<div class="header-categoria" onclick="toggleCategoria('${cat.id}')"><span>${cat.nome} (${itensCat.length})</span><span id="icon-${cat.id}">▼</span></div><div id="cont-${cat.id}" class="conteudo-categoria">${itensCat.map(p => `<div class="card" style="padding:10px; margin-bottom:8px; border-top:none; display:flex; justify-content:space-between; align-items:center;"><span>${p.favorito?'⭐':''} ${p.nome}<br><small style="color:var(--gray)">Qtd: ${p.qtd} | C: R$ ${p.custo} | V: R$ ${p.vendaSugerida || '---'}</small></span><div><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoPeca('${p.id}','${p.nome}','${p.custo}','${p.vendaSugerida||''}','${p.qtd}','${p.categoria}',${p.favorito})">✏️</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Apagar?'))db.collection('estoque').doc('${p.id}').delete()">🗑️</button></div></div>`).join('')}</div>`;
+                    container.innerHTML += `<div class="header-categoria" onclick="toggleCategoria('${cat.id}')"><span>${cat.nome} (${itensCat.length})</span><span id="icon-${cat.id}">▼</span></div><div id="cont-${cat.id}" class="conteudo-categoria">${itensCat.map(p => `<div class="card" style="padding:10px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;"><span>${p.favorito?'⭐':''} ${p.nome}<br><small>Qtd: ${p.qtd} ${ehLucas ? '' : '| C: R$ '+p.custo} | V: R$ ${p.vendaSugerida || '---'}</small></span>${ehLucas ? '' : `<div><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoPeca('${p.id}','${p.nome}','${p.custo}','${p.vendaSugerida||''}','${p.qtd}','${p.categoria}',${p.favorito})">✏️</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Apagar item do estoque?'))db.collection('estoque').doc('${p.id}').delete()">🗑️</button></div>`}</div>`).join('')}</div>`;
                 }
             });
         }
-
-        function addEstoque() {
-            const id = document.getElementById('editPecaId').value, n = document.getElementById('nProd').value, c = document.getElementById('cProd').value, v = document.getElementById('vSug').value, q = parseInt(document.getElementById('qProd').value), cat = document.getElementById('catProd').value, fav = document.getElementById('favProd').checked;
-            const dados = {nome:n, custo:parseFloat(c)||0, vendaSugerida:parseFloat(v)||0, qtd:q, categoria:cat, favorito: fav};
-            if(id) db.collection("estoque").doc(id).update(dados).then(() => cancelarEdicaoPeca());
-            else db.collection("estoque").add(dados).then(() => { document.getElementById('nProd').value=''; document.getElementById('cProd').value=''; document.getElementById('vSug').value=''; });
-        }
-
-        function prepararEdicaoPeca(id, n, c, v, q, cat, fav) {
-            document.getElementById('editPecaId').value = id; document.getElementById('nProd').value = n; document.getElementById('cProd').value = c; document.getElementById('vSug').value = v; document.getElementById('qProd').value = q; document.getElementById('catProd').value = cat; document.getElementById('favProd').checked = fav;
-            document.getElementById('tituloEstoque').innerText = "✏️ EDITAR"; document.getElementById('btnCancelarEdit').style.display = 'block'; window.scrollTo(0,0);
-        }
-
-        function cancelarEdicaoPeca() { document.getElementById('editPecaId').value = ''; document.getElementById('nProd').value = ''; document.getElementById('cProd').value = ''; document.getElementById('vSug').value = ''; document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE"; document.getElementById('btnCancelarEdit').style.display = 'none'; }
+        function toggleCategoria(id) { const c = document.getElementById('cont-' + id); const i = document.getElementById('icon-' + id); c.style.display = (c.style.display === 'block') ? 'none' : 'block'; i.innerText = (c.style.display === 'block') ? '▲' : '▼'; }
         function mudar(n) { const ids=['aba1','aba2','aba3','aba4']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
         function arquivar() { if(confirm("Arquivar?")) db.collection("caixa").get().then(s=>s.forEach(d=>{ db.collection("relatorio").add(d.data()); db.collection("caixa").doc(d.id).delete(); })); }
         function salvarConfig() { db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value), lucasServ: parseFloat(document.getElementById('cfgLucasServ').value), lucasProd: parseFloat(document.getElementById('cfgLucasProd').value), lojaProd: parseFloat(document.getElementById('cfgLojaProd').value) }).then(()=>alert("Taxas Salvas!")); }
+        function gerarRelatorioFiltrado() {
+            let dados = window.filtrados || []; if(dados.length === 0) return alert("Nada no filtro!");
+            let b=0, m3d=0, invest=0, loja=0, lucas=0, leo=0, dan=0;
+            dados.forEach(i => {
+                let vV = i.venda || 0, vC = i.custo || 0, isLucas = (i.vendedor === 'LUCAS');
+                if (i.status === 'Pago') {
+                    if(i.origem === 'Leo') { m3d += vC; b += vV; } else { b += vV; invest += vC; }
+                    let tx = i.tipo === "Serviço" ? vV * (configGlobal.lojaServ/100) : vV * (configGlobal.lojaProd/100);
+                    loja += tx; let luc = vV - tx - vC;
+                    if(i.tipo === "Serviço") { let pLc = isLucas ? luc * (configGlobal.lucasServ/100) : 0; lucas += pLc; leo += (luc-pLc)*0.6; dan += (luc-pLc)*0.4; }
+                    else { let pLc = isLucas ? luc * (configGlobal.lucasProd/100) : 0; lucas += pLc; leo += (luc-pLc)*0.5; dan += (luc-pLc)*0.5; }
+                }
+            });
+            let html = ehLucas ? `<b>MINHA COMISSÃO:</b> R$ ${lucas.toFixed(2)}` : `<b>Bruto:</b> R$ ${b.toFixed(2)}<hr><b>Léo:</b> R$ ${leo.toFixed(2)}<br><b>Daniel:</b> R$ ${dan.toFixed(2)}<br><b>Japão:</b> R$ ${lucas.toFixed(2)}<br><b>Taxa Loja:</b> R$ ${loja.toFixed(2)}`;
+            document.getElementById('corpoRelatorio').innerHTML = html; document.getElementById('areaRelatorio').style.display = 'block';
+        }
     </script>
 </body>
 </html>
