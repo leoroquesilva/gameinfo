@@ -58,7 +58,6 @@
                 <div class="card">
                     <h2 id="tituloCaixa" style="font-size: 1rem; color: var(--yellow); margin-bottom: 5px;">➕ LANÇAR</h2>
                     <input type="hidden" id="editCaixaId">
-                    <label style="font-size:0.7rem; color:gray">Data da Venda:</label>
                     <input type="date" id="dataVendaManual">
                     <select id="tVenda" onchange="renderEstoqueDropdown()"><option value="Serviço">🔧 Serviço</option><option value="Produto">📦 Produto</option></select>
                     <select id="statusVenda"><option value="Pago">✅ Pago</option><option value="Em Aberto">⏳ Em Aberto</option></select>
@@ -120,7 +119,7 @@
                         <input type="checkbox" id="favProd" style="width:20px; margin:0;"> 
                         <label for="favProd" style="color:var(--yellow); font-size:0.9rem;">⭐ DEIXAR NO TOPO</label>
                     </div>
-                    <button id="btnSalvarEstoque" class="btn" onclick="addEstoque()">Salvar no Estoque</button>
+                    <button id="btnSalvarEstoque" class="btn" onclick="addEstoque()">Salvar</button>
                     <button id="btnCancelarEdit" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoPeca()">Cancelar</button>
                 </div>
                 <div id="listaEstoqueAgrupada"></div>
@@ -163,10 +162,7 @@
                 } else if(userN.includes('DANIEL')) selVend.value = 'DANIEL';
                 else selVend.value = 'LEO';
                 sinc();
-            } else { 
-                document.getElementById('screenLogin').classList.add('active'); 
-                document.getElementById('screenApp').classList.remove('active'); 
-            }
+            } else { document.getElementById('screenLogin').classList.add('active'); document.getElementById('screenApp').classList.remove('active'); }
         });
 
         function loginFirebase() { auth.signInWithEmailAndPassword(document.getElementById('emailLogin').value, document.getElementById('passLogin').value); }
@@ -285,7 +281,7 @@
                 let corB = i.origem === 'Leo' ? 'var(--purple)' : (i.tipo === 'Serviço' ? '#0088ff' : '#22c55e');
                 let corS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
                 let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : "";
-                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Excluir definitivamente?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)}</small></div>`;
+                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)}</small></div>`;
             });
             if(isLucas) {
                 document.getElementById('gridValores').innerHTML = `<div class="item-resumo" style="grid-column: span 2; border-color:var(--green)">MINHA COMISSÃO (JAPÃO)<span>R$ ${tLc.toFixed(2)}</span></div>`;
@@ -338,8 +334,8 @@
                     if(i.origem === 'Leo') { m3d += vC; b += vV; } else { b += vV; invest += vC; }
                     let tx = i.tipo === "Serviço" ? vV * (configGlobal.lojaServ/100) : vV * (configGlobal.lojaProd/100);
                     loja += tx; let luc = vV - tx - vC;
-                    if(i.tipo === "Serviço") { let pLc = isLucasVendedor ? luc * (configGlobal.lucasServ/100) : 0; lucas += pLc; leo += (luc-pLc)*0.6; tDan += (luc-pLc)*0.4; }
-                    else { let pLc = isLucasVendedor ? luc * (configGlobal.lucasProd/100) : 0; lucas += pLc; leo += (luc-pLc)*0.5; tDan += (luc-pLc)*0.5; }
+                    if(i.tipo === "Serviço") { let pLc = isLucasVendedor ? luc * (configGlobal.lucasServ/100) : 0; lucas += pLc; leo += (luc-pLc)*0.6; dan += (luc-pLc)*0.4; }
+                    else { let pLc = isLucasVendedor ? luc * (configGlobal.lucasProd/100) : 0; lucas += pLc; leo += (luc-pLc)*0.5; dan += (luc-pLc)*0.5; }
                 }
             });
             let txt = isLucas ? `<b>Minha Comissão:</b> R$ ${lucas.toFixed(2)}` : `<b>Bruto:</b> R$ ${b.toFixed(2)}<br><b>3D LÉO:</b> R$ ${m3d.toFixed(2)}<hr><b>Léo:</b> R$ ${leo.toFixed(2)}<br><b>Daniel:</b> R$ ${dan.toFixed(2)}<br><b>Japão:</b> R$ ${lucas.toFixed(2)}`;
@@ -360,72 +356,27 @@
             categorias.forEach(cat => {
                 const itensCat = pEstoque.filter(p => p.categoria === cat.id).sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1));
                 if (itensCat.length > 0) {
-                    container.innerHTML += `<div class="header-categoria" onclick="toggleCategoria('${cat.id}')"><span>${cat.nome} (${itensCat.length})</span><span id="icon-${cat.id}">▼</span></div><div id="cont-${cat.id}" class="conteudo-categoria">${itensCat.map(p => `<div class="card" style="padding:10px; margin-bottom:8px; border-top:none; display:flex; justify-content:space-between; align-items:center;"><span>${p.favorito?'⭐':''} ${p.nome}<br><small style="color:var(--gray)">Qtd: ${p.qtd} | C: R$ ${p.custo}</small></span><div><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoPeca('${p.id}','${p.nome}','${p.custo}','${p.vendaSugerida||''}','${p.qtd}','${p.categoria}',${p.favorito})">✏️</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Excluir do estoque?'))db.collection('estoque').doc('${p.id}').delete()">🗑️</button></div></div>`).join('')}</div>`;
+                    container.innerHTML += `<div class="header-categoria" onclick="toggleCategoria('${cat.id}')"><span>${cat.nome} (${itensCat.length})</span><span id="icon-${cat.id}">▼</span></div><div id="cont-${cat.id}" class="conteudo-categoria">${itensCat.map(p => `<div class="card" style="padding:10px; margin-bottom:8px; border-top:none; display:flex; justify-content:space-between; align-items:center;"><span>${p.favorito?'⭐':''} ${p.nome}<br><small style="color:var(--gray)">Qtd: ${p.qtd} | C: R$ ${(p.custo||0).toFixed(2)} | V: R$ ${(p.vendaSugerida||0).toFixed(2)}</small></span><div><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoPeca('${p.id}','${p.nome}','${p.custo}','${p.vendaSugerida||''}','${p.qtd}','${p.categoria}',${p.favorito})">✏️</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Apagar?'))db.collection('estoque').doc('${p.id}').delete()">🗑️</button></div></div>`).join('')}</div>`;
                 }
             });
         }
 
         function addEstoque() {
-            const id = document.getElementById('editPecaId').value;
-            const n = document.getElementById('nProd').value;
-            const c = document.getElementById('cProd').value;
-            const v = document.getElementById('vSug').value;
-            const q = parseInt(document.getElementById('qProd').value);
-            const cat = document.getElementById('catProd').value;
-            const fav = document.getElementById('favProd').checked;
-            
-            if(!n) return alert("Digite o nome do produto!");
-
-            const dados = {
-                nome: n, 
-                custo: parseFloat(c) || 0, 
-                vendaSugerida: parseFloat(v) || 0, 
-                qtd: q || 0, 
-                categoria: cat, 
-                favorito: fav
-            };
-
-            if(id) {
-                db.collection("estoque").doc(id).update(dados).then(() => cancelarEdicaoPeca());
-            } else {
-                db.collection("estoque").add(dados).then(() => {
-                    document.getElementById('nProd').value=''; 
-                    document.getElementById('cProd').value=''; 
-                    document.getElementById('vSug').value='';
-                    document.getElementById('qProd').value='1';
-                });
-            }
+            const id = document.getElementById('editPecaId').value, n = document.getElementById('nProd').value, c = document.getElementById('cProd').value, v = document.getElementById('vSug').value, q = parseInt(document.getElementById('qProd').value), cat = document.getElementById('catProd').value, fav = document.getElementById('favProd').checked;
+            const dados = {nome:n, custo:parseFloat(c)||0, vendaSugerida:parseFloat(v)||0, qtd:q, categoria:cat, favorito: fav};
+            if(id) db.collection("estoque").doc(id).update(dados).then(() => cancelarEdicaoPeca());
+            else db.collection("estoque").add(dados).then(() => { document.getElementById('nProd').value=''; document.getElementById('cProd').value=''; document.getElementById('vSug').value=''; });
         }
 
         function prepararEdicaoPeca(id, n, c, v, q, cat, fav) {
-            document.getElementById('editPecaId').value = id; 
-            document.getElementById('nProd').value = n; 
-            document.getElementById('cProd').value = c; 
-            document.getElementById('vSug').value = v; 
-            document.getElementById('qProd').value = q; 
-            document.getElementById('catProd').value = cat; 
-            document.getElementById('favProd').checked = fav;
-            document.getElementById('tituloEstoque').innerText = "✏️ EDITAR"; 
-            document.getElementById('btnCancelarEdit').style.display = 'block'; 
-            window.scrollTo(0,0);
+            document.getElementById('editPecaId').value = id; document.getElementById('nProd').value = n; document.getElementById('cProd').value = c; document.getElementById('vSug').value = v; document.getElementById('qProd').value = q; document.getElementById('catProd').value = cat; document.getElementById('favProd').checked = fav;
+            document.getElementById('tituloEstoque').innerText = "✏️ EDITAR"; document.getElementById('btnCancelarEdit').style.display = 'block'; window.scrollTo(0,0);
         }
 
-        function cancelarEdicaoPeca() { 
-            document.getElementById('editPecaId').value = ''; 
-            document.getElementById('nProd').value = ''; 
-            document.getElementById('cProd').value = ''; 
-            document.getElementById('vSug').value = ''; 
-            document.getElementById('qProd').value = '1';
-            document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE"; 
-            document.getElementById('btnCancelarEdit').style.display = 'none'; 
-        }
+        function cancelarEdicaoPeca() { document.getElementById('editPecaId').value = ''; document.getElementById('nProd').value = ''; document.getElementById('cProd').value = ''; document.getElementById('vSug').value = ''; document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE"; document.getElementById('btnCancelarEdit').style.display = 'none'; }
         
-        function mudar(n) { 
-            const ids=['aba1','aba2','aba3','aba4']; 
-            ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); 
-            document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); 
-        }
-
+        function mudar(n) { const ids=['aba1','aba2','aba3','aba4']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
+        
         function arquivar() { 
             if(confirm("Arquivar tudo do caixa para o histórico?")) {
                 db.collection("caixa").get().then(s => {
@@ -437,14 +388,7 @@
             }
         }
 
-        function salvarConfig() { 
-            db.collection("config").doc("geral").set({ 
-                lojaServ: parseFloat(document.getElementById('cfgLojaServ').value), 
-                lucasServ: parseFloat(document.getElementById('cfgLucasServ').value), 
-                lucasProd: parseFloat(document.getElementById('cfgLucasProd').value), 
-                lojaProd: parseFloat(document.getElementById('cfgLojaProd').value) 
-            }).then(()=>alert("Taxas Salvas!")); 
-        }
+        function salvarConfig() { db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value), lucasServ: parseFloat(document.getElementById('cfgLucasServ').value), lucasProd: parseFloat(document.getElementById('cfgLucasProd').value), lojaProd: parseFloat(document.getElementById('cfgLojaProd').value) }).then(()=>alert("Taxas Salvas!")); }
     </script>
 </body>
 </html>
