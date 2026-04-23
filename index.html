@@ -127,13 +127,13 @@
 
             <div id="aba4" style="display:none;">
                 <div class="card">
-                    <h2>⚙️ TAXAS</h2>
+                    <h2>⚙️ TAXAS ATUAIS</h2>
                     <label>Loja % Serv</label><input type="number" id="cfgLojaServ">
                     <label>Lucas % Serv</label><input type="number" id="cfgLucasServ">
                     <hr>
-                    <label>Loja % Prod</label><input type="number" id="cfgLojaProd">
-                    <label>Lucas % Prod</label><input type="number" id="cfgLucasProd">
-                    <button class="btn" onclick="salvarConfig()">Salvar</button>
+                    <label>Loja % Prod (sobre lucro)</label><input type="number" id="cfgLojaProd">
+                    <label>Lucas % Prod (sobre lucro)</label><input type="number" id="cfgLucasProd">
+                    <button class="btn" onclick="salvarConfig()">Salvar Novas Taxas</button>
                 </div>
             </div>
         </div>
@@ -143,7 +143,7 @@
         const firebaseConfig = { apiKey: "AIzaSyCmSqPQ40Emwzu2MDMH_0AxAhkElutWkok", authDomain: "gameinfogestao.firebaseapp.com", projectId: "gameinfogestao", storageBucket: "gameinfogestao.firebasestorage.app", messagingSenderId: "289347667383", appId: "1:289347667383:web:d6e19796f630e5fcaf5432" };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore(); const auth = firebase.auth();
-        let userN = "", hGeral = [], configGlobal = { lojaServ: 10, lucasServ: 30, lucasProd: 15, lojaProd: 0 }, pEstoque = [], cAtual = [];
+        let userN = "", hGeral = [], configGlobal = { lojaServ: 0, lucasServ: 0, lucasProd: 0, lojaProd: 0 }, pEstoque = [], cAtual = [];
         let isLucas = false;
 
         auth.onAuthStateChanged(u => {
@@ -168,7 +168,18 @@
         function loginFirebase() { auth.signInWithEmailAndPassword(document.getElementById('emailLogin').value, document.getElementById('passLogin').value); }
 
         function sinc() {
-            db.collection("config").doc("geral").onSnapshot(doc => { if(doc.exists) configGlobal = doc.data(); });
+            // BUSCA AS TAXAS E PREENCHE OS INPUTS DA ENGRENAGEM
+            db.collection("config").doc("geral").onSnapshot(doc => { 
+                if(doc.exists) {
+                    configGlobal = doc.data(); 
+                    document.getElementById('cfgLojaServ').value = configGlobal.lojaServ || 0;
+                    document.getElementById('cfgLucasServ').value = configGlobal.lucasServ || 0;
+                    document.getElementById('cfgLojaProd').value = configGlobal.lojaProd || 0;
+                    document.getElementById('cfgLucasProd').value = configGlobal.lucasProd || 0;
+                    renderCaixa(cAtual); // Recalcula o caixa com as taxas novas
+                }
+            });
+
             db.collection("caixa").orderBy("data","desc").onSnapshot(s => { 
                 cAtual = []; 
                 s.forEach(d => {
@@ -177,6 +188,7 @@
                 }); 
                 renderCaixa(cAtual); 
             });
+
             db.collection("relatorio").orderBy("data","desc").onSnapshot(s => { 
                 hGeral = []; 
                 s.forEach(d => {
@@ -185,6 +197,7 @@
                 }); 
                 filtrar(); 
             });
+
             db.collection("estoque").onSnapshot(s => { pEstoque = []; s.forEach(d => pEstoque.push({...d.data(), id: d.id})); renderEstoqueList(); renderEstoqueDropdown(); });
         }
 
@@ -219,7 +232,7 @@
             const v = { 
                 tipo: document.getElementById('tVenda').value, status: document.getElementById('statusVenda').value, 
                 os: document.getElementById('osNum').value, desc: document.getElementById('desc').value,
-                venda: parseFloat(document.getElementById('vend').value), custo: parseFloat(document.getElementById('cust').value)||0,
+                venda: parseFloat(document.getElementById('vend').value) || 0, custo: parseFloat(document.getElementById('cust').value)||0,
                 vendedor: document.getElementById('vendedorVenda').value, loginAtivo: userN,
                 data: firebase.firestore.Timestamp.fromDate(dataFinal), 
                 dataFormatada: dataFinal.toLocaleDateString('pt-BR'),
@@ -268,21 +281,47 @@
         function renderCaixa(items) {
             const l = document.getElementById('listaCaixa'); l.innerHTML = '';
             let tLeo=0, tDan=0, tLc=0, tLj=0, tInvLoja=0, t3DLeoCusto=0;
+
+            // Garantir que taxas não sejam nulas para evitar NaN
+            const txLojServ = configGlobal.lojaServ || 0;
+            const txLucServ = configGlobal.lucasServ || 0;
+            const txLojProd = configGlobal.lojaProd || 0;
+            const txLucProd = configGlobal.lucasProd || 0;
+
             items.forEach(i => {
-                let vV = i.venda || 0, vC = i.custo || 0;
+                let vV = parseFloat(i.venda) || 0, vC = parseFloat(i.custo) || 0;
                 let isLucasVendedor = (i.vendedor === 'LUCAS');
+
                 if (i.status === 'Pago') {
                     if(i.origem === 'Leo') { t3DLeoCusto += vC; } else { tInvLoja += vC; }
-                    let tx = i.tipo === "Serviço" ? vV * (configGlobal.lojaServ/100) : vV * (configGlobal.lojaProd/100);
-                    tLj += tx; let luc = vV - tx - vC;
-                    if(i.tipo === "Serviço") { let pLc = isLucasVendedor ? luc * (configGlobal.lucasServ/100) : 0; tLc += pLc; tLeo += (luc-pLc)*0.6; tDan += (luc-pLc)*0.4; }
-                    else { let pLc = isLucasVendedor ? luc * (configGlobal.lucasProd/100) : 0; tLc += pLc; tLeo += (luc-pLc)*0.5; tDan += (luc-pLc)*0.5; }
+                    
+                    let txCobrada = 0;
+                    let lucroParaDividir = 0;
+
+                    if(i.tipo === "Serviço") {
+                        txCobrada = vV * (txLojServ/100);
+                        lucroParaDividir = vV - txCobrada - vC;
+                        let pLc = isLucasVendedor ? (lucroParaDividir * (txLucServ/100)) : 0;
+                        tLc += pLc;
+                        tLeo += (lucroParaDividir - pLc) * 0.6;
+                        tDan += (lucroParaDividir - pLc) * 0.4;
+                    } else {
+                        let lucroBruto = vV - vC;
+                        txCobrada = lucroBruto * (txLojProd/100);
+                        lucroParaDividir = lucroBruto - txCobrada;
+                        let pLc = isLucasVendedor ? (lucroParaDividir * (txLucProd/100)) : 0;
+                        tLc += pLc;
+                        tLeo += (lucroParaDividir - pLc) * 0.5;
+                        tDan += (lucroParaDividir - pLc) * 0.5;
+                    }
+                    tLj += txCobrada;
                 }
                 let corB = i.origem === 'Leo' ? 'var(--purple)' : (i.tipo === 'Serviço' ? '#0088ff' : '#22c55e');
                 let corS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
                 let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : "";
                 l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)}</small></div>`;
             });
+
             if(isLucas) {
                 document.getElementById('gridValores').innerHTML = `<div class="item-resumo" style="grid-column: span 2; border-color:var(--green)">MINHA COMISSÃO (JAPÃO)<span>R$ ${tLc.toFixed(2)}</span></div>`;
             } else {
@@ -327,15 +366,33 @@
             let dados = window.filtrados || [];
             if(dados.length === 0) return alert("Nenhum dado no filtro!");
             let b=0, m3d=0, invest=0, loja=0, lucas=0, leo=0, dan=0;
+            
+            const txLojServ = configGlobal.lojaServ || 0;
+            const txLucServ = configGlobal.lucasServ || 0;
+            const txLojProd = configGlobal.lojaProd || 0;
+            const txLucProd = configGlobal.lucasProd || 0;
+
             dados.forEach(i => {
-                let vV = i.venda || 0, vC = i.custo || 0;
+                let vV = parseFloat(i.venda) || 0, vC = parseFloat(i.custo) || 0;
                 let isLucasVendedor = (i.vendedor === 'LUCAS');
                 if (i.status === 'Pago') {
                     if(i.origem === 'Leo') { m3d += vC; b += vV; } else { b += vV; invest += vC; }
-                    let tx = i.tipo === "Serviço" ? vV * (configGlobal.lojaServ/100) : vV * (configGlobal.lojaProd/100);
-                    loja += tx; let luc = vV - tx - vC;
-                    if(i.tipo === "Serviço") { let pLc = isLucasVendedor ? luc * (configGlobal.lucasServ/100) : 0; lucas += pLc; leo += (luc-pLc)*0.6; dan += (luc-pLc)*0.4; }
-                    else { let pLc = isLucasVendedor ? luc * (configGlobal.lucasProd/100) : 0; lucas += pLc; leo += (luc-pLc)*0.5; dan += (luc-pLc)*0.5; }
+                    
+                    let tx = 0, lucFinal = 0;
+
+                    if(i.tipo === "Serviço") {
+                        tx = vV * (txLojServ/100);
+                        lucFinal = vV - tx - vC;
+                        let pLc = isLucasVendedor ? lucFinal * (txLucServ/100) : 0;
+                        lucas += pLc; leo += (lucFinal-pLc)*0.6; dan += (lucFinal-pLc)*0.4;
+                    } else {
+                        let lucroBruto = vV - vC;
+                        tx = lucroBruto * (txLojProd/100);
+                        lucFinal = lucroBruto - tx;
+                        let pLc = isLucasVendedor ? lucFinal * (txLucProd/100) : 0;
+                        lucas += pLc; leo += (lucFinal-pLc)*0.5; dan += (lucFinal-pLc)*0.5;
+                    }
+                    loja += tx;
                 }
             });
             let txt = isLucas ? `<b>Minha Comissão:</b> R$ ${lucas.toFixed(2)}` : `<b>Bruto:</b> R$ ${b.toFixed(2)}<br><b>3D LÉO:</b> R$ ${m3d.toFixed(2)}<hr><b>Léo:</b> R$ ${leo.toFixed(2)}<br><b>Daniel:</b> R$ ${dan.toFixed(2)}<br><b>Japão:</b> R$ ${lucas.toFixed(2)}`;
@@ -388,7 +445,19 @@
             }
         }
 
-        function salvarConfig() { db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value), lucasServ: parseFloat(document.getElementById('cfgLucasServ').value), lucasProd: parseFloat(document.getElementById('cfgLucasProd').value), lojaProd: parseFloat(document.getElementById('cfgLojaProd').value) }).then(()=>alert("Taxas Salvas!")); }
+        function salvarConfig() { 
+            const nLojS = parseFloat(document.getElementById('cfgLojaServ').value) || 0;
+            const nLucS = parseFloat(document.getElementById('cfgLucasServ').value) || 0;
+            const nLojP = parseFloat(document.getElementById('cfgLojaProd').value) || 0;
+            const nLucP = parseFloat(document.getElementById('cfgLucasProd').value) || 0;
+
+            db.collection("config").doc("geral").set({ 
+                lojaServ: nLojS, 
+                lucasServ: nLucS, 
+                lucasProd: nLucP, 
+                lojaProd: nLojP 
+            }).then(()=>alert("Taxas Salvas com Sucesso!")); 
+        }
     </script>
 </body>
 </html>
