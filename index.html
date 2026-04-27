@@ -56,11 +56,15 @@
 
             <div id="aba1">
                 <div class="card">
-                    <h2 id="tituloCaixa" style="font-size: 1rem; color: var(--yellow); margin-bottom: 5px;">➕ LANÇAR</h2>
+                    <h2 id="tituloCaixa" style="font-size: 1rem; color: var(--yellow); margin-bottom: 5px;">➕ NOVO LANÇAMENTO</h2>
                     <input type="hidden" id="editCaixaId">
+                    <input type="hidden" id="editCaixaOrigem" value="caixa">
                     <input type="date" id="dataVendaManual">
                     <select id="tVenda" onchange="renderEstoqueDropdown()"><option value="Serviço">🔧 Serviço</option><option value="Produto">📦 Produto</option></select>
-                    <select id="statusVenda"><option value="Pago">✅ Pago</option><option value="Em Aberto">⏳ Em Aberto</option></select>
+                    <select id="statusVenda">
+                        <option value="Em Aberto">⏳ Em Aberto</option>
+                        <option value="Pago">✅ Pago</option>
+                    </select>
                     <select id="selectPeca" onchange="carregarPeca()"></select>
                     <div style="display:flex; gap:8px;">
                         <input type="text" id="osNum" placeholder="Nº O.S." style="flex: 1;">
@@ -75,12 +79,12 @@
                         <option value="DANIEL">Vendedor: DANIEL</option>
                         <option value="LUCAS">Vendedor: LUCAS (JAPÃO)</option>
                     </select>
-                    <button id="btnLancar" class="btn" onclick="lancar()">Lançar</button>
+                    <button id="btnLancar" class="btn" onclick="lancar()">PIX FEITO 🍕</button>
                     <button id="btnCancelarCaixa" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoCaixa()">Cancelar Edição</button>
                 </div>
                 <div id="gridValores" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;"></div>
                 <div id="listaCaixa" style="max-height:300px; overflow-y:auto;"></div>
-                <button id="btnArquivar" class="btn" style="background:#222; color:white;" onclick="arquivar()">Fechar Dia (Arquivar)</button>
+                <button id="btnArquivar" class="btn" style="background:#222; color:white;" onclick="arquivar()">Arquivar Pagos (Limpar Caixa)</button>
             </div>
 
             <div id="aba2" style="display:none;">
@@ -168,7 +172,6 @@
         function loginFirebase() { auth.signInWithEmailAndPassword(document.getElementById('emailLogin').value, document.getElementById('passLogin').value); }
 
         function sinc() {
-            // BUSCA AS TAXAS E PREENCHE OS INPUTS DA ENGRENAGEM
             db.collection("config").doc("geral").onSnapshot(doc => { 
                 if(doc.exists) {
                     configGlobal = doc.data(); 
@@ -176,7 +179,7 @@
                     document.getElementById('cfgLucasServ').value = configGlobal.lucasServ || 0;
                     document.getElementById('cfgLojaProd').value = configGlobal.lojaProd || 0;
                     document.getElementById('cfgLucasProd').value = configGlobal.lucasProd || 0;
-                    renderCaixa(cAtual); // Recalcula o caixa com as taxas novas
+                    renderCaixa(cAtual);
                 }
             });
 
@@ -222,6 +225,7 @@
 
         function lancar() {
             const id = document.getElementById('editCaixaId').value;
+            const colDestino = document.getElementById('editCaixaOrigem').value || "caixa";
             const s = document.getElementById('selectPeca');
             const cat = s.options[s.selectedIndex]?.getAttribute('data-cat') || "Loja";
             const pecaId = s.options[s.selectedIndex]?.getAttribute('data-id');
@@ -240,18 +244,24 @@
                 origem: cat === "Leo3D" ? "Leo" : "Daniel"
             };
 
-            if(id) { db.collection("caixa").doc(id).update(v).then(() => cancelarEdicaoCaixa()); }
+            if(id) { 
+                db.collection(colDestino).doc(id).update(v).then(() => {
+                    cancelarEdicaoCaixa();
+                    alert("Alteração salva com sucesso!");
+                }); 
+            }
             else { 
                 db.collection("caixa").add(v).then(() => { 
                     if(pecaId) db.collection("estoque").doc(pecaId).update({qtd: firebase.firestore.FieldValue.increment(-1)}); 
                 });
-                document.getElementById('osNum').value=''; document.getElementById('desc').value=''; document.getElementById('vend').value=''; document.getElementById('cust').value=''; 
+                cancelarEdicaoCaixa();
             }
         }
 
-        function prepararEdicaoCaixa(id) {
-            const i = cAtual.find(x => x.id === id);
+        function prepararEdicaoCaixa(id, origem = 'caixa') {
+            const i = (origem === 'caixa') ? cAtual.find(x => x.id === id) : hGeral.find(x => x.id === id);
             document.getElementById('editCaixaId').value = id;
+            document.getElementById('editCaixaOrigem').value = origem;
             document.getElementById('dataVendaManual').value = i.dataISO || new Date().toISOString().split('T')[0];
             document.getElementById('tVenda').value = i.tipo;
             document.getElementById('statusVenda').value = i.status;
@@ -260,29 +270,30 @@
             document.getElementById('vend').value = i.venda;
             document.getElementById('cust').value = i.custo;
             document.getElementById('vendedorVenda').value = i.vendedor || 'LEO';
-            document.getElementById('tituloCaixa').innerText = "✏️ EDITAR LANÇAMENTO";
-            document.getElementById('btnLancar').innerText = "ATUALIZAR";
+            document.getElementById('tituloCaixa').innerText = "✏️ EDITANDO: " + (origem === 'caixa' ? "CAIXA" : "HISTÓRICO");
+            document.getElementById('btnLancar').innerText = "SALVAR ALTERAÇÃO ✅";
             document.getElementById('btnCancelarCaixa').style.display = 'block';
+            mudar(1);
             window.scrollTo(0,0);
         }
 
         function cancelarEdicaoCaixa() {
             document.getElementById('editCaixaId').value = '';
+            document.getElementById('editCaixaOrigem').value = 'caixa';
             document.getElementById('dataVendaManual').value = new Date().toISOString().split('T')[0];
             document.getElementById('osNum').value = '';
             document.getElementById('desc').value = '';
             document.getElementById('vend').value = '';
             document.getElementById('cust').value = '';
-            document.getElementById('tituloCaixa').innerText = "➕ LANÇAR";
-            document.getElementById('btnLancar').innerText = "Lançar";
+            document.getElementById('statusVenda').value = 'Em Aberto';
+            document.getElementById('tituloCaixa').innerText = "➕ NOVO LANÇAMENTO";
+            document.getElementById('btnLancar').innerText = "PIX FEITO 🍕";
             document.getElementById('btnCancelarCaixa').style.display = 'none';
         }
 
         function renderCaixa(items) {
             const l = document.getElementById('listaCaixa'); l.innerHTML = '';
             let tLeo=0, tDan=0, tLc=0, tLj=0, tInvLoja=0, t3DLeoCusto=0;
-
-            // Garantir que taxas não sejam nulas para evitar NaN
             const txLojServ = configGlobal.lojaServ || 0;
             const txLucServ = configGlobal.lucasServ || 0;
             const txLojProd = configGlobal.lojaProd || 0;
@@ -291,35 +302,25 @@
             items.forEach(i => {
                 let vV = parseFloat(i.venda) || 0, vC = parseFloat(i.custo) || 0;
                 let isLucasVendedor = (i.vendedor === 'LUCAS');
-
                 if (i.status === 'Pago') {
                     if(i.origem === 'Leo') { t3DLeoCusto += vC; } else { tInvLoja += vC; }
-                    
-                    let txCobrada = 0;
-                    let lucroParaDividir = 0;
-
+                    let txCobrada = 0, lucroParaDividir = 0;
                     if(i.tipo === "Serviço") {
-                        txCobrada = vV * (txLojServ/100);
-                        lucroParaDividir = vV - txCobrada - vC;
+                        txCobrada = vV * (txLojServ/100); lucroParaDividir = vV - txCobrada - vC;
                         let pLc = isLucasVendedor ? (lucroParaDividir * (txLucServ/100)) : 0;
-                        tLc += pLc;
-                        tLeo += (lucroParaDividir - pLc) * 0.6;
-                        tDan += (lucroParaDividir - pLc) * 0.4;
+                        tLc += pLc; tLeo += (lucroParaDividir - pLc) * 0.6; tDan += (lucroParaDividir - pLc) * 0.4;
                     } else {
                         let lucroBruto = vV - vC;
-                        txCobrada = lucroBruto * (txLojProd/100);
-                        lucroParaDividir = lucroBruto - txCobrada;
+                        txCobrada = lucroBruto * (txLojProd/100); lucroParaDividir = lucroBruto - txCobrada;
                         let pLc = isLucasVendedor ? (lucroParaDividir * (txLucProd/100)) : 0;
-                        tLc += pLc;
-                        tLeo += (lucroParaDividir - pLc) * 0.5;
-                        tDan += (lucroParaDividir - pLc) * 0.5;
+                        tLc += pLc; tLeo += (lucroParaDividir - pLc) * 0.5; tDan += (lucroParaDividir - pLc) * 0.5;
                     }
                     tLj += txCobrada;
                 }
                 let corB = i.origem === 'Leo' ? 'var(--purple)' : (i.tipo === 'Serviço' ? '#0088ff' : '#22c55e');
                 let corS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
                 let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : "";
-                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)}</small></div>`;
+                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}', 'caixa')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)} | <b style="color:${corS}">${i.status}</b></small></div>`;
             });
 
             if(isLucas) {
@@ -358,7 +359,7 @@
             dados.forEach(i => {
                 let corS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
                 let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : "";
-                l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;"><button class="btn-icon" style="color:var(--yellow);" onclick="reabrir('${i.id}')">📤</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'relatorio')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar do histórico?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada} <span style="color:${corS}">[${i.status.toUpperCase()}]</span></small><br>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor || 'LEO'}]</small><br><small>R$ ${(i.venda||0).toFixed(2)}</small></div>`;
+                l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;"><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoCaixa('${i.id}', 'relatorio')">✏️</button><button class="btn-icon" style="color:var(--yellow);" onclick="reabrir('${i.id}')">📤</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'relatorio')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar do histórico?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada} <span style="color:${corS}">[${i.status.toUpperCase()}]</span></small><br>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor || 'LEO'}]</small><br><small>R$ ${(i.venda||0).toFixed(2)}</small></div>`;
             });
         }
 
@@ -366,7 +367,6 @@
             let dados = window.filtrados || [];
             if(dados.length === 0) return alert("Nenhum dado no filtro!");
             let b=0, m3d=0, invest=0, loja=0, lucas=0, leo=0, dan=0;
-            
             const txLojServ = configGlobal.lojaServ || 0;
             const txLucServ = configGlobal.lucasServ || 0;
             const txLojProd = configGlobal.lojaProd || 0;
@@ -377,18 +377,14 @@
                 let isLucasVendedor = (i.vendedor === 'LUCAS');
                 if (i.status === 'Pago') {
                     if(i.origem === 'Leo') { m3d += vC; b += vV; } else { b += vV; invest += vC; }
-                    
                     let tx = 0, lucFinal = 0;
-
                     if(i.tipo === "Serviço") {
-                        tx = vV * (txLojServ/100);
-                        lucFinal = vV - tx - vC;
+                        tx = vV * (txLojServ/100); lucFinal = vV - tx - vC;
                         let pLc = isLucasVendedor ? lucFinal * (txLucServ/100) : 0;
                         lucas += pLc; leo += (lucFinal-pLc)*0.6; dan += (lucFinal-pLc)*0.4;
                     } else {
                         let lucroBruto = vV - vC;
-                        tx = lucroBruto * (txLojProd/100);
-                        lucFinal = lucroBruto - tx;
+                        tx = lucroBruto * (txLojProd/100); lucFinal = lucroBruto - tx;
                         let pLc = isLucasVendedor ? lucFinal * (txLucProd/100) : 0;
                         lucas += pLc; leo += (lucFinal-pLc)*0.5; dan += (lucFinal-pLc)*0.5;
                     }
@@ -435,12 +431,14 @@
         function mudar(n) { const ids=['aba1','aba2','aba3','aba4']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
         
         function arquivar() { 
-            if(confirm("Arquivar tudo do caixa para o histórico?")) {
-                db.collection("caixa").get().then(s => {
+            if(confirm("Deseja mover todos os serviços PAGOS para o histórico? Os pendentes continuarão aqui.")) {
+                db.collection("caixa").where("status", "==", "Pago").get().then(s => {
+                    if(s.empty) { alert("Não há nenhum serviço PAGO para arquivar."); return; }
                     s.forEach(d => { 
                         db.collection("relatorio").add(d.data()); 
                         db.collection("caixa").doc(d.id).delete(); 
                     }); 
+                    alert("Arquivamento concluído!");
                 }); 
             }
         }
@@ -450,14 +448,9 @@
             const nLucS = parseFloat(document.getElementById('cfgLucasServ').value) || 0;
             const nLojP = parseFloat(document.getElementById('cfgLojaProd').value) || 0;
             const nLucP = parseFloat(document.getElementById('cfgLucasProd').value) || 0;
-
-            db.collection("config").doc("geral").set({ 
-                lojaServ: nLojS, 
-                lucasServ: nLucS, 
-                lucasProd: nLucP, 
-                lojaProd: nLojP 
-            }).then(()=>alert("Taxas Salvas com Sucesso!")); 
+            db.collection("config").doc("geral").set({ lojaServ: nLojS, lucasServ: nLucS, lucasProd: nLucP, lojaProd: nLojP }).then(()=>alert("Taxas Salvas com Sucesso!")); 
         }
     </script>
 </body>
 </html>
+
