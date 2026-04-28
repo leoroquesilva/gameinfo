@@ -79,12 +79,12 @@
                         <option value="DANIEL">Vendedor: DANIEL</option>
                         <option value="LUCAS">Vendedor: LUCAS (JAPÃO)</option>
                     </select>
-                    <button id="btnLancar" class="btn" onclick="lancar()">PIX FEITO 🍕</button>
+                    <button id="btnLancar" class="btn" onclick="lancar()">LANÇAR SERVIÇO / VENDA</button>
                     <button id="btnCancelarCaixa" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoCaixa()">Cancelar Edição</button>
                 </div>
                 <div id="gridValores" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;"></div>
                 <div id="listaCaixa" style="max-height:300px; overflow-y:auto;"></div>
-                <button id="btnArquivar" class="btn" style="background:#222; color:white;" onclick="arquivar()">Arquivar Pagos (Limpar Caixa)</button>
+                <button id="btnArquivar" class="btn" style="background:#22c55e; color:black;" onclick="arquivar()">PIX FEITO ✅ (Arquivar)</button>
             </div>
 
             <div id="aba2" style="display:none;">
@@ -182,7 +182,6 @@
                     renderCaixa(cAtual);
                 }
             });
-
             db.collection("caixa").orderBy("data","desc").onSnapshot(s => { 
                 cAtual = []; 
                 s.forEach(d => {
@@ -191,7 +190,6 @@
                 }); 
                 renderCaixa(cAtual); 
             });
-
             db.collection("relatorio").orderBy("data","desc").onSnapshot(s => { 
                 hGeral = []; 
                 s.forEach(d => {
@@ -200,7 +198,6 @@
                 }); 
                 filtrar(); 
             });
-
             db.collection("estoque").onSnapshot(s => { pEstoque = []; s.forEach(d => pEstoque.push({...d.data(), id: d.id})); renderEstoqueList(); renderEstoqueDropdown(); });
         }
 
@@ -247,10 +244,9 @@
             if(id) { 
                 db.collection(colDestino).doc(id).update(v).then(() => {
                     cancelarEdicaoCaixa();
-                    alert("Alteração salva com sucesso!");
+                    alert("Alteração salva!");
                 }); 
-            }
-            else { 
+            } else { 
                 db.collection("caixa").add(v).then(() => { 
                     if(pecaId) db.collection("estoque").doc(pecaId).update({qtd: firebase.firestore.FieldValue.increment(-1)}); 
                 });
@@ -270,7 +266,7 @@
             document.getElementById('vend').value = i.venda;
             document.getElementById('cust').value = i.custo;
             document.getElementById('vendedorVenda').value = i.vendedor || 'LEO';
-            document.getElementById('tituloCaixa').innerText = "✏️ EDITANDO: " + (origem === 'caixa' ? "CAIXA" : "HISTÓRICO");
+            document.getElementById('tituloCaixa').innerText = "✏️ EDITANDO " + (origem === 'caixa' ? "CAIXA" : "HISTÓRICO");
             document.getElementById('btnLancar').innerText = "SALVAR ALTERAÇÃO ✅";
             document.getElementById('btnCancelarCaixa').style.display = 'block';
             mudar(1);
@@ -280,14 +276,13 @@
         function cancelarEdicaoCaixa() {
             document.getElementById('editCaixaId').value = '';
             document.getElementById('editCaixaOrigem').value = 'caixa';
-            document.getElementById('dataVendaManual').value = new Date().toISOString().split('T')[0];
             document.getElementById('osNum').value = '';
             document.getElementById('desc').value = '';
             document.getElementById('vend').value = '';
             document.getElementById('cust').value = '';
             document.getElementById('statusVenda').value = 'Em Aberto';
             document.getElementById('tituloCaixa').innerText = "➕ NOVO LANÇAMENTO";
-            document.getElementById('btnLancar').innerText = "PIX FEITO 🍕";
+            document.getElementById('btnLancar').innerText = "LANÇAR SERVIÇO / VENDA";
             document.getElementById('btnCancelarCaixa').style.display = 'none';
         }
 
@@ -371,7 +366,6 @@
             const txLucServ = configGlobal.lucasServ || 0;
             const txLojProd = configGlobal.lojaProd || 0;
             const txLucProd = configGlobal.lucasProd || 0;
-
             dados.forEach(i => {
                 let vV = parseFloat(i.venda) || 0, vC = parseFloat(i.custo) || 0;
                 let isLucasVendedor = (i.vendedor === 'LUCAS');
@@ -431,14 +425,14 @@
         function mudar(n) { const ids=['aba1','aba2','aba3','aba4']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
         
         function arquivar() { 
-            if(confirm("Deseja mover todos os serviços PAGOS para o histórico? Os pendentes continuarão aqui.")) {
+            if(confirm("Deseja realizar o PIX e arquivar os serviços pagos?")) {
                 db.collection("caixa").where("status", "==", "Pago").get().then(s => {
-                    if(s.empty) { alert("Não há nenhum serviço PAGO para arquivar."); return; }
+                    if(s.empty) { alert("Não há pagamentos registrados para arquivar!"); return; }
                     s.forEach(d => { 
                         db.collection("relatorio").add(d.data()); 
                         db.collection("caixa").doc(d.id).delete(); 
                     }); 
-                    alert("Arquivamento concluído!");
+                    alert("Pix Feito! Serviços arquivados.");
                 }); 
             }
         }
@@ -448,9 +442,8 @@
             const nLucS = parseFloat(document.getElementById('cfgLucasServ').value) || 0;
             const nLojP = parseFloat(document.getElementById('cfgLojaProd').value) || 0;
             const nLucP = parseFloat(document.getElementById('cfgLucasProd').value) || 0;
-            db.collection("config").doc("geral").set({ lojaServ: nLojS, lucasServ: nLucS, lucasProd: nLucP, lojaProd: nLojP }).then(()=>alert("Taxas Salvas com Sucesso!")); 
+            db.collection("config").doc("geral").set({ lojaServ: nLojS, lucasServ: nLucS, lucasProd: nLucP, lojaProd: nLojP }).then(()=>alert("Taxas Salvas!")); 
         }
     </script>
 </body>
 </html>
-
