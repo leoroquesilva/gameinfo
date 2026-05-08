@@ -26,6 +26,8 @@
         .tag-os { color: var(--yellow); font-weight: bold; background: #333; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; margin-right: 5px; }
         .header-categoria { background: #222; color: var(--yellow); font-size: 0.85rem; font-weight: bold; margin: 10px 0; text-transform: uppercase; padding: 12px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
         .conteudo-categoria { display: none; padding-left: 5px; }
+        .carrinho-area { background: #0b0b0b; padding: 10px; border: 1px dashed var(--yellow); border-radius: 8px; margin: 10px 0; }
+        .item-carrinho { display: flex; justify-content: space-between; font-size: 0.8rem; padding: 5px; border-bottom: 1px solid #222; }
     </style>
 </head>
 <body>
@@ -60,26 +62,36 @@
                     <input type="hidden" id="editCaixaId">
                     <input type="hidden" id="editCaixaOrigem" value="caixa">
                     <input type="date" id="dataVendaManual">
-                    <select id="tVenda" onchange="renderEstoqueDropdown()"><option value="Serviço">🔧 Serviço</option><option value="Produto">📦 Produto</option></select>
+                    
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" id="osNum" placeholder="Nº O.S." style="flex: 1;">
+                        <input type="text" id="desc" placeholder="Cliente / Aparelho" style="flex: 2;">
+                    </div>
+
+                    <div class="carrinho-area">
+                        <label style="font-size: 0.7rem; color: var(--yellow); font-weight: bold;">ADICIONAR PRODUTOS/SERVIÇOS:</label>
+                        <select id="tVenda" onchange="renderEstoqueDropdown()"><option value="Serviço">🔧 Serviço</option><option value="Produto">📦 Produto</option></select>
+                        <select id="selectPeca" onchange="carregarPeca()"></select>
+                        <input type="text" id="nomeAvulso" placeholder="Nome do item manual..." style="display:none;">
+                        <div style="display:flex; gap:8px;">
+                            <input type="number" id="cust" placeholder="Custo R$">
+                            <input type="number" id="vend" placeholder="Venda R$ (0 se for agregar)">
+                        </div>
+                        <button class="btn" style="background:#333; color:var(--yellow); padding:8px; margin-bottom:5px;" onclick="addAoCarrinho()">➕ ADICIONAR AO LANÇAMENTO</button>
+                        <div id="listaItensCarrinho"></div>
+                        <div id="totalCarrinho" style="text-align:right; font-weight:bold; color:var(--green); font-size:0.9rem; margin-top:5px; display:none;">Total: R$ 0.00</div>
+                    </div>
+
                     <select id="statusVenda">
                         <option value="Em Aberto">⏳ Em Aberto</option>
                         <option value="Pago">✅ Pago</option>
                     </select>
-                    <select id="selectPeca" onchange="carregarPeca()"></select>
-                    <div style="display:flex; gap:8px;">
-                        <input type="text" id="osNum" placeholder="Nº O.S." style="flex: 1;">
-                        <input type="text" id="desc" placeholder="Descrição/Cliente" style="flex: 2;">
-                    </div>
-                    <div style="display:flex; gap:8px;">
-                        <input type="number" id="cust" placeholder="Custo R$">
-                        <input type="number" id="vend" placeholder="Venda R$">
-                    </div>
                     <select id="vendedorVenda">
                         <option value="LEO">Vendedor: LÉO</option>
                         <option value="DANIEL">Vendedor: DANIEL</option>
                         <option value="LUCAS">Vendedor: LUCAS (JAPÃO)</option>
                     </select>
-                    <button id="btnLancar" class="btn" onclick="lancar()">LANÇAR SERVIÇO / VENDA</button>
+                    <button id="btnLancar" class="btn" onclick="lancar()">FINALIZAR LANÇAMENTO</button>
                     <button id="btnCancelarCaixa" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoCaixa()">Cancelar Edição</button>
                 </div>
                 <div id="gridValores" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;"></div>
@@ -147,7 +159,7 @@
         const firebaseConfig = { apiKey: "AIzaSyCmSqPQ40Emwzu2MDMH_0AxAhkElutWkok", authDomain: "gameinfogestao.firebaseapp.com", projectId: "gameinfogestao", storageBucket: "gameinfogestao.firebasestorage.app", messagingSenderId: "289347667383", appId: "1:289347667383:web:d6e19796f630e5fcaf5432" };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore(); const auth = firebase.auth();
-        let userN = "", hGeral = [], configGlobal = { lojaServ: 0, lucasServ: 0, lucasProd: 0, lojaProd: 0 }, pEstoque = [], cAtual = [];
+        let userN = "", hGeral = [], configGlobal = { lojaServ: 0, lucasServ: 0, lucasProd: 0, lojaProd: 0 }, pEstoque = [], cAtual = [], carrinho = [];
         let isLucas = false;
 
         auth.onAuthStateChanged(u => {
@@ -183,16 +195,14 @@
                 }
             });
             db.collection("caixa").orderBy("data","desc").onSnapshot(s => { 
-                cAtual = []; 
-                s.forEach(d => {
+                cAtual = []; s.forEach(d => {
                     let data = d.data();
                     if(!isLucas || data.vendedor === 'LUCAS') cAtual.push({...data, id: d.id});
                 }); 
                 renderCaixa(cAtual); 
             });
             db.collection("relatorio").orderBy("data","desc").onSnapshot(s => { 
-                hGeral = []; 
-                s.forEach(d => {
+                hGeral = []; s.forEach(d => {
                     let data = d.data();
                     if(!isLucas || data.vendedor === 'LUCAS') hGeral.push({...data, id: d.id});
                 }); 
@@ -205,52 +215,109 @@
             const sel = document.getElementById('selectPeca');
             const tipo = document.getElementById('tVenda').value;
             sel.innerHTML = '<option value="">-- Selecionar Peça / Serviço --</option>';
+            sel.innerHTML += '<option value="AVULSO" style="color:var(--yellow)">➕ ITEM AVULSO / MANUAL</option>';
             pEstoque.filter(p => tipo === "Serviço" ? (p.categoria === "Serviço" || p.categoria === "Leo3D") : (p.categoria === "Produto" || p.categoria === "Leo3D"))
             .sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1))
-            .forEach(p => sel.innerHTML += `<option value="${p.custo}" data-venda="${p.vendaSugerida || ''}" data-nome="${p.nome}" data-qtd="${p.qtd}" data-id="${p.id}" data-cat="${p.categoria}">${p.favorito ? '⭐ ' : ''}${p.nome}</option>`);
+            .forEach(p => sel.innerHTML += `<option value="${p.custo}" data-venda="${p.vendaSugerida || ''}" data-nome="${p.nome}" data-id="${p.id}" data-cat="${p.categoria}">${p.favorito ? '⭐ ' : ''}${p.nome}</option>`);
         }
 
         function carregarPeca() {
             const s = document.getElementById('selectPeca');
-            if(s.value) {
+            const avulsoInput = document.getElementById('nomeAvulso');
+            if(s.value === "AVULSO") {
+                avulsoInput.style.display = "block";
+                document.getElementById('cust').value = "";
+                document.getElementById('vend').value = "";
+            } else if(s.value) {
+                avulsoInput.style.display = "none";
                 const opt = s.options[s.selectedIndex];
-                document.getElementById('desc').value = opt.getAttribute('data-nome');
                 document.getElementById('cust').value = s.value;
                 document.getElementById('vend').value = opt.getAttribute('data-venda');
             }
         }
 
+        function addAoCarrinho() {
+            const s = document.getElementById('selectPeca');
+            const avulsoInput = document.getElementById('nomeAvulso');
+            let nome = "", idRef = null, categoria = "Loja";
+
+            if(s.value === "AVULSO") {
+                nome = avulsoInput.value;
+                categoria = document.getElementById('tVenda').value;
+            } else {
+                const opt = s.options[s.selectedIndex];
+                if(!opt) return;
+                nome = opt.getAttribute('data-nome');
+                idRef = opt.getAttribute('data-id');
+                categoria = opt.getAttribute('data-cat');
+            }
+
+            const custoInput = document.getElementById('cust').value;
+            const vendaInput = document.getElementById('vend').value;
+            const custo = parseFloat(custoInput) || 0;
+            const venda = parseFloat(vendaInput) || 0;
+
+            if(!nome) return alert("Defina o nome do item!");
+
+            carrinho.push({ nome, custo, venda, idRef, categoria });
+            
+            s.value = ""; avulsoInput.value = ""; avulsoInput.style.display = "none";
+            document.getElementById('cust').value = ""; document.getElementById('vend').value = "";
+            
+            renderCarrinho();
+        }
+
+        function renderCarrinho() {
+            const div = document.getElementById('listaItensCarrinho');
+            const totalDiv = document.getElementById('totalCarrinho');
+            div.innerHTML = "";
+            let total = 0;
+            carrinho.forEach((item, index) => {
+                total += item.venda;
+                div.innerHTML += `<div class="item-carrinho"><span>${item.nome}</span> <span>R$ ${item.venda.toFixed(2)} <button onclick="carrinho.splice(${index},1); renderCarrinho()" style="color:red; background:none; border:none; cursor:pointer;">✕</button></span></div>`;
+            });
+            if(carrinho.length > 0) {
+                totalDiv.style.display = "block";
+                totalDiv.innerText = `Total da Venda: R$ ${total.toFixed(2)}`;
+            } else totalDiv.style.display = "none";
+        }
+
         function lancar() {
+            if(carrinho.length === 0) return alert("Adicione pelo menos um item!");
             const id = document.getElementById('editCaixaId').value;
             const colDestino = document.getElementById('editCaixaOrigem').value || "caixa";
-            const s = document.getElementById('selectPeca');
-            const cat = s.options[s.selectedIndex]?.getAttribute('data-cat') || "Loja";
-            const pecaId = s.options[s.selectedIndex]?.getAttribute('data-id');
             const dataInput = document.getElementById('dataVendaManual').value;
             const partes = dataInput.split('-');
             const dataFinal = new Date(partes[0], partes[1] - 1, partes[2], 12, 0, 0);
 
+            const totalVenda = carrinho.reduce((a, b) => a + b.venda, 0);
+            const totalCusto = carrinho.reduce((a, b) => a + b.custo, 0);
+            const nomesItens = carrinho.map(i => i.nome).join(' + ');
+            const descCliente = document.getElementById('desc').value || "Cliente";
+
             const v = { 
-                tipo: document.getElementById('tVenda').value, status: document.getElementById('statusVenda').value, 
-                os: document.getElementById('osNum').value, desc: document.getElementById('desc').value,
-                venda: parseFloat(document.getElementById('vend').value) || 0, custo: parseFloat(document.getElementById('cust').value)||0,
+                tipo: carrinho[carrinho.length-1].categoria === "Leo3D" ? "Produto" : (carrinho[carrinho.length-1].categoria || "Serviço"),
+                status: document.getElementById('statusVenda').value, 
+                os: document.getElementById('osNum').value, 
+                desc: `${descCliente} (${nomesItens})`,
+                venda: totalVenda, custo: totalCusto,
                 vendedor: document.getElementById('vendedorVenda').value, loginAtivo: userN,
                 data: firebase.firestore.Timestamp.fromDate(dataFinal), 
                 dataFormatada: dataFinal.toLocaleDateString('pt-BR'),
                 dataISO: dataInput,
-                origem: cat === "Leo3D" ? "Leo" : "Daniel"
+                origem: carrinho.some(i => i.categoria === "Leo3D") ? "Leo" : "Daniel",
+                detalhes: carrinho
             };
 
             if(id) { 
-                db.collection(colDestino).doc(id).update(v).then(() => {
-                    cancelarEdicaoCaixa();
-                    alert("Alteração salva!");
-                }); 
+                db.collection(colDestino).doc(id).update(v).then(() => { cancelarEdicaoCaixa(); alert("Alterado!"); }); 
             } else { 
                 db.collection("caixa").add(v).then(() => { 
-                    if(pecaId) db.collection("estoque").doc(pecaId).update({qtd: firebase.firestore.FieldValue.increment(-1)}); 
+                    carrinho.forEach(item => {
+                        if(item.idRef) db.collection("estoque").doc(item.idRef).update({qtd: firebase.firestore.FieldValue.increment(-1)}); 
+                    });
+                    cancelarEdicaoCaixa();
                 });
-                cancelarEdicaoCaixa();
             }
         }
 
@@ -259,30 +326,30 @@
             document.getElementById('editCaixaId').value = id;
             document.getElementById('editCaixaOrigem').value = origem;
             document.getElementById('dataVendaManual').value = i.dataISO || new Date().toISOString().split('T')[0];
-            document.getElementById('tVenda').value = i.tipo;
-            document.getElementById('statusVenda').value = i.status;
             document.getElementById('osNum').value = i.os || '';
-            document.getElementById('desc').value = i.desc;
-            document.getElementById('vend').value = i.venda;
-            document.getElementById('cust').value = i.custo;
+            document.getElementById('desc').value = i.desc.split(' (')[0];
+            document.getElementById('statusVenda').value = i.status;
             document.getElementById('vendedorVenda').value = i.vendedor || 'LEO';
-            document.getElementById('tituloCaixa').innerText = "✏️ EDITANDO " + (origem === 'caixa' ? "CAIXA" : "HISTÓRICO");
+            
+            if(i.detalhes) carrinho = [...i.detalhes];
+            else carrinho = [{nome: i.desc, custo: i.custo, venda: i.venda, categoria: i.tipo}];
+            
+            renderCarrinho();
+            document.getElementById('tituloCaixa').innerText = "✏️ EDITANDO";
             document.getElementById('btnLancar').innerText = "SALVAR ALTERAÇÃO ✅";
             document.getElementById('btnCancelarCaixa').style.display = 'block';
-            mudar(1);
-            window.scrollTo(0,0);
+            mudar(1); window.scrollTo(0,0);
         }
 
         function cancelarEdicaoCaixa() {
             document.getElementById('editCaixaId').value = '';
-            document.getElementById('editCaixaOrigem').value = 'caixa';
             document.getElementById('osNum').value = '';
             document.getElementById('desc').value = '';
-            document.getElementById('vend').value = '';
             document.getElementById('cust').value = '';
-            document.getElementById('statusVenda').value = 'Em Aberto';
+            document.getElementById('vend').value = '';
+            carrinho = []; renderCarrinho();
             document.getElementById('tituloCaixa').innerText = "➕ NOVO LANÇAMENTO";
-            document.getElementById('btnLancar').innerText = "LANÇAR SERVIÇO / VENDA";
+            document.getElementById('btnLancar').innerText = "FINALIZAR LANÇAMENTO";
             document.getElementById('btnCancelarCaixa').style.display = 'none';
         }
 
@@ -331,8 +398,7 @@
             const it = hGeral.find(x => x.id === id); 
             if(it) { 
                 const {id, ...rest} = it;
-                db.collection("caixa").add(rest).then(() => db.collection("relatorio").doc(id).delete()); 
-                mudar(1); 
+                db.collection("caixa").add(rest).then(() => db.collection("relatorio").doc(id).delete()); mudar(1); 
             } 
         }
 
@@ -427,12 +493,9 @@
         function arquivar() { 
             if(confirm("Deseja realizar o PIX e arquivar os serviços pagos?")) {
                 db.collection("caixa").where("status", "==", "Pago").get().then(s => {
-                    if(s.empty) { alert("Não há pagamentos registrados para arquivar!"); return; }
-                    s.forEach(d => { 
-                        db.collection("relatorio").add(d.data()); 
-                        db.collection("caixa").doc(d.id).delete(); 
-                    }); 
-                    alert("Pix Feito! Serviços arquivados.");
+                    if(s.empty) { alert("Não há pagamentos registrados!"); return; }
+                    s.forEach(d => { db.collection("relatorio").add(d.data()); db.collection("caixa").doc(d.id).delete(); }); 
+                    alert("Arquivado!");
                 }); 
             }
         }
