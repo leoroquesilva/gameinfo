@@ -20,14 +20,18 @@
         .active-tab { background: var(--yellow); color: #000; }
         .tab-menu { display: flex; gap: 4px; margin-bottom: 15px; }
         .venda-item { background: #111; padding: 12px; border-radius: 10px; margin-bottom: 10px; border: 1px solid #333; text-align: left; position: relative; }
-        .item-resumo { background: #222; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #333; margin-bottom: 5px; }
+        .item-resumo { background: #222; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #333; margin-bottom: 5px; cursor: pointer; position: relative; transition: 0.3s; }
+        .item-resumo.pago { border-color: var(--green) !important; background: #06200f; }
         .item-resumo span { display: block; font-weight: bold; color: var(--yellow); font-size: 1.1rem; }
+        .item-resumo.pago span { color: var(--green); }
+        .badge-pago { display: none; position: absolute; top: 2px; right: 5px; font-size: 0.6rem; color: var(--green); font-weight: bold; }
+        .item-resumo.pago .badge-pago { display: block; }
         .btn-icon { background: none; border: none; font-size: 1.2rem; cursor: pointer; margin-left: 8px; padding: 0;}
         .tag-os { color: var(--yellow); font-weight: bold; background: #333; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem; margin-right: 5px; }
         .header-categoria { background: #222; color: var(--yellow); font-size: 0.85rem; font-weight: bold; margin: 10px 0; text-transform: uppercase; padding: 12px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
         .conteudo-categoria { display: none; padding-left: 5px; }
         .carrinho-area { background: #0b0b0b; padding: 10px; border: 1px dashed var(--yellow); border-radius: 8px; margin: 10px 0; }
-        .item-carrinho { display: flex; justify-content: space-between; font-size: 0.8rem; padding: 5px; border-bottom: 1px solid #222; }
+        .item-carrinho { display: flex; justify-content: space-between; font-size: 0.8rem; padding: 8px; border-bottom: 1px solid #222; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -161,6 +165,7 @@
         const db = firebase.firestore(); const auth = firebase.auth();
         let userN = "", hGeral = [], configGlobal = { lojaServ: 0, lucasServ: 0, lucasProd: 0, lojaProd: 0 }, pEstoque = [], cAtual = [], carrinho = [];
         let isLucas = false;
+        let estadosPagamento = {}; // Armazena localmente quais cards de resumo foram marcados como pagos
 
         auth.onAuthStateChanged(u => {
             if(u) {
@@ -240,7 +245,6 @@
             const s = document.getElementById('selectPeca');
             const avulsoInput = document.getElementById('nomeAvulso');
             let nome = "", idRef = null, categoria = "Loja";
-
             if(s.value === "AVULSO") {
                 nome = avulsoInput.value;
                 categoria = document.getElementById('tVenda').value;
@@ -251,35 +255,38 @@
                 idRef = opt.getAttribute('data-id');
                 categoria = opt.getAttribute('data-cat');
             }
-
-            const custoInput = document.getElementById('cust').value;
-            const vendaInput = document.getElementById('vend').value;
-            const custo = parseFloat(custoInput) || 0;
-            const venda = parseFloat(vendaInput) || 0;
-
+            const custo = parseFloat(document.getElementById('cust').value) || 0;
+            const venda = parseFloat(document.getElementById('vend').value) || 0;
             if(!nome) return alert("Defina o nome do item!");
-
             carrinho.push({ nome, custo, venda, idRef, categoria });
-            
             s.value = ""; avulsoInput.value = ""; avulsoInput.style.display = "none";
             document.getElementById('cust').value = ""; document.getElementById('vend').value = "";
-            
             renderCarrinho();
+        }
+
+        function editarItemCarrinho(index) {
+            const item = carrinho[index];
+            const selectPeca = document.getElementById('selectPeca');
+            const avulsoInput = document.getElementById('nomeAvulso');
+            if (item.idRef) { selectPeca.value = item.custo; avulsoInput.style.display = "none"; } 
+            else { selectPeca.value = "AVULSO"; avulsoInput.value = item.nome; avulsoInput.style.display = "block"; }
+            document.getElementById('cust').value = item.custo;
+            document.getElementById('vend').value = item.venda;
+            carrinho.splice(index, 1);
+            renderCarrinho();
+            document.getElementById('cust').focus();
         }
 
         function renderCarrinho() {
             const div = document.getElementById('listaItensCarrinho');
             const totalDiv = document.getElementById('totalCarrinho');
-            div.innerHTML = "";
-            let total = 0;
+            div.innerHTML = ""; let total = 0;
             carrinho.forEach((item, index) => {
                 total += item.venda;
-                div.innerHTML += `<div class="item-carrinho"><span>${item.nome}</span> <span>R$ ${item.venda.toFixed(2)} <button onclick="carrinho.splice(${index},1); renderCarrinho()" style="color:red; background:none; border:none; cursor:pointer;">✕</button></span></div>`;
+                div.innerHTML += `<div class="item-carrinho"><span onclick="editarItemCarrinho(${index})">✏️ ${item.nome}</span> <span>R$ ${item.venda.toFixed(2)} <button onclick="carrinho.splice(${index},1); renderCarrinho()" style="color:red; background:none; border:none; cursor:pointer; margin-left:10px;">✕</button></span></div>`;
             });
-            if(carrinho.length > 0) {
-                totalDiv.style.display = "block";
-                totalDiv.innerText = `Total da Venda: R$ ${total.toFixed(2)}`;
-            } else totalDiv.style.display = "none";
+            if(carrinho.length > 0) { totalDiv.style.display = "block"; totalDiv.innerText = `Total da Venda: R$ ${total.toFixed(2)}`; } 
+            else totalDiv.style.display = "none";
         }
 
         function lancar() {
@@ -289,12 +296,10 @@
             const dataInput = document.getElementById('dataVendaManual').value;
             const partes = dataInput.split('-');
             const dataFinal = new Date(partes[0], partes[1] - 1, partes[2], 12, 0, 0);
-
             const totalVenda = carrinho.reduce((a, b) => a + b.venda, 0);
             const totalCusto = carrinho.reduce((a, b) => a + b.custo, 0);
             const nomesItens = carrinho.map(i => i.nome).join(' + ');
             const descCliente = document.getElementById('desc').value || "Cliente";
-
             const v = { 
                 tipo: carrinho[carrinho.length-1].categoria === "Leo3D" ? "Produto" : (carrinho[carrinho.length-1].categoria || "Serviço"),
                 status: document.getElementById('statusVenda').value, 
@@ -308,17 +313,8 @@
                 origem: carrinho.some(i => i.categoria === "Leo3D") ? "Leo" : "Daniel",
                 detalhes: carrinho
             };
-
-            if(id) { 
-                db.collection(colDestino).doc(id).update(v).then(() => { cancelarEdicaoCaixa(); alert("Alterado!"); }); 
-            } else { 
-                db.collection("caixa").add(v).then(() => { 
-                    carrinho.forEach(item => {
-                        if(item.idRef) db.collection("estoque").doc(item.idRef).update({qtd: firebase.firestore.FieldValue.increment(-1)}); 
-                    });
-                    cancelarEdicaoCaixa();
-                });
-            }
+            if(id) { db.collection(colDestino).doc(id).update(v).then(() => { cancelarEdicaoCaixa(); alert("Alterado!"); }); } 
+            else { db.collection("caixa").add(v).then(() => { carrinho.forEach(item => { if(item.idRef) db.collection("estoque").doc(item.idRef).update({qtd: firebase.firestore.FieldValue.increment(-1)}); }); cancelarEdicaoCaixa(); }); }
         }
 
         function prepararEdicaoCaixa(id, origem = 'caixa') {
@@ -330,10 +326,7 @@
             document.getElementById('desc').value = i.desc.split(' (')[0];
             document.getElementById('statusVenda').value = i.status;
             document.getElementById('vendedorVenda').value = i.vendedor || 'LEO';
-            
-            if(i.detalhes) carrinho = [...i.detalhes];
-            else carrinho = [{nome: i.desc, custo: i.custo, venda: i.venda, categoria: i.tipo}];
-            
+            if(i.detalhes) carrinho = [...i.detalhes]; else carrinho = [{nome: i.desc, custo: i.custo, venda: i.venda, categoria: i.tipo}];
             renderCarrinho();
             document.getElementById('tituloCaixa').innerText = "✏️ EDITANDO";
             document.getElementById('btnLancar').innerText = "SALVAR ALTERAÇÃO ✅";
@@ -342,15 +335,18 @@
         }
 
         function cancelarEdicaoCaixa() {
-            document.getElementById('editCaixaId').value = '';
-            document.getElementById('osNum').value = '';
-            document.getElementById('desc').value = '';
-            document.getElementById('cust').value = '';
-            document.getElementById('vend').value = '';
+            document.getElementById('editCaixaId').value = ''; document.getElementById('osNum').value = ''; document.getElementById('desc').value = '';
+            document.getElementById('cust').value = ''; document.getElementById('vend').value = '';
             carrinho = []; renderCarrinho();
             document.getElementById('tituloCaixa').innerText = "➕ NOVO LANÇAMENTO";
             document.getElementById('btnLancar').innerText = "FINALIZAR LANÇAMENTO";
             document.getElementById('btnCancelarCaixa').style.display = 'none';
+        }
+
+        // --- FUNÇÃO PARA MARCAR RESUMO COMO PAGO ---
+        function alternarCheckResumo(label) {
+            estadosPagamento[label] = !estadosPagamento[label];
+            renderCaixa(cAtual); // Re-renderiza para aplicar a classe CSS
         }
 
         function renderCaixa(items) {
@@ -385,10 +381,25 @@
                 l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}', 'caixa')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)} | <b style="color:${corS}">${i.status}</b></small></div>`;
             });
 
+            // Grid de Resumo com Função de Marcar como Pago
+            const criarCardResumo = (label, valor, corBorda = 'var(--gray)') => {
+                const estaPago = estadosPagamento[label] ? 'pago' : '';
+                return `<div class="item-resumo ${estaPago}" style="border-color:${corBorda}" onclick="alternarCheckResumo('${label}')">
+                            <div class="badge-pago">PAGO ✅</div>
+                            ${label}<span>R$ ${valor.toFixed(2)}</span>
+                        </div>`;
+            };
+
             if(isLucas) {
-                document.getElementById('gridValores').innerHTML = `<div class="item-resumo" style="grid-column: span 2; border-color:var(--green)">MINHA COMISSÃO (JAPÃO)<span>R$ ${tLc.toFixed(2)}</span></div>`;
+                document.getElementById('gridValores').innerHTML = criarCardResumo('MINHA COMISSÃO (JAPÃO)', tLc, 'var(--green)');
             } else {
-                document.getElementById('gridValores').innerHTML = `<div class="item-resumo" style="border-color:var(--purple)">3D LÉO<span>R$ ${t3DLeoCusto.toFixed(2)}</span></div><div class="item-resumo">LÉO (Sócio)<span>R$ ${tLeo.toFixed(2)}</span></div><div class="item-resumo">DANIEL (Sócio)<span>R$ ${tDan.toFixed(2)}</span></div><div class="item-resumo">JAPÃO (Comissão)<span>R$ ${tLc.toFixed(2)}</span></div><div class="item-resumo">REINVESTIR LOJA<span>R$ ${tInvLoja.toFixed(2)}</span></div><div class="item-resumo">TAXA LOJA<span>R$ ${tLj.toFixed(2)}</span></div>`;
+                document.getElementById('gridValores').innerHTML = 
+                    criarCardResumo('3D LÉO', t3DLeoCusto, 'var(--purple)') +
+                    criarCardResumo('LÉO (Sócio)', tLeo) +
+                    criarCardResumo('DANIEL (Sócio)', tDan) +
+                    criarCardResumo('JAPÃO (Comissão)', tLc) +
+                    criarCardResumo('REINVESTIR LOJA', tInvLoja) +
+                    criarCardResumo('TAXA LOJA', tLj);
             }
         }
 
@@ -396,10 +407,7 @@
         
         function reabrir(id) { 
             const it = hGeral.find(x => x.id === id); 
-            if(it) { 
-                const {id, ...rest} = it;
-                db.collection("caixa").add(rest).then(() => db.collection("relatorio").doc(id).delete()); mudar(1); 
-            } 
+            if(it) { const {id, ...rest} = it; db.collection("caixa").add(rest).then(() => db.collection("relatorio").doc(id).delete()); mudar(1); } 
         }
 
         function filtrar() {
@@ -428,10 +436,6 @@
             let dados = window.filtrados || [];
             if(dados.length === 0) return alert("Nenhum dado no filtro!");
             let b=0, m3d=0, invest=0, loja=0, lucas=0, leo=0, dan=0;
-            const txLojServ = configGlobal.lojaServ || 0;
-            const txLucServ = configGlobal.lucasServ || 0;
-            const txLojProd = configGlobal.lojaProd || 0;
-            const txLucProd = configGlobal.lucasProd || 0;
             dados.forEach(i => {
                 let vV = parseFloat(i.venda) || 0, vC = parseFloat(i.custo) || 0;
                 let isLucasVendedor = (i.vendedor === 'LUCAS');
@@ -439,13 +443,13 @@
                     if(i.origem === 'Leo') { m3d += vC; b += vV; } else { b += vV; invest += vC; }
                     let tx = 0, lucFinal = 0;
                     if(i.tipo === "Serviço") {
-                        tx = vV * (txLojServ/100); lucFinal = vV - tx - vC;
-                        let pLc = isLucasVendedor ? lucFinal * (txLucServ/100) : 0;
+                        tx = vV * (configGlobal.lojaServ/100); lucFinal = vV - tx - vC;
+                        let pLc = isLucasVendedor ? lucFinal * (configGlobal.lucasServ/100) : 0;
                         lucas += pLc; leo += (lucFinal-pLc)*0.6; dan += (lucFinal-pLc)*0.4;
                     } else {
                         let lucroBruto = vV - vC;
-                        tx = lucroBruto * (txLojProd/100); lucFinal = lucroBruto - tx;
-                        let pLc = isLucasVendedor ? lucFinal * (txLucProd/100) : 0;
+                        tx = lucroBruto * (configGlobal.lojaProd/100); lucFinal = lucroBruto - tx;
+                        let pLc = isLucasVendedor ? lucFinal * (configGlobal.lucasProd/100) : 0;
                         lucas += pLc; leo += (lucFinal-pLc)*0.5; dan += (lucFinal-pLc)*0.5;
                     }
                     loja += tx;
@@ -496,16 +500,13 @@
                     if(s.empty) { alert("Não há pagamentos registrados!"); return; }
                     s.forEach(d => { db.collection("relatorio").add(d.data()); db.collection("caixa").doc(d.id).delete(); }); 
                     alert("Arquivado!");
+                    estadosPagamento = {}; // Reseta os checks ao arquivar
                 }); 
             }
         }
 
         function salvarConfig() { 
-            const nLojS = parseFloat(document.getElementById('cfgLojaServ').value) || 0;
-            const nLucS = parseFloat(document.getElementById('cfgLucasServ').value) || 0;
-            const nLojP = parseFloat(document.getElementById('cfgLojaProd').value) || 0;
-            const nLucP = parseFloat(document.getElementById('cfgLucasProd').value) || 0;
-            db.collection("config").doc("geral").set({ lojaServ: nLojS, lucasServ: nLucS, lucasProd: nLucP, lojaProd: nLojP }).then(()=>alert("Taxas Salvas!")); 
+            db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value)||0, lucasServ: parseFloat(document.getElementById('cfgLucasServ').value)||0, lucasProd: parseFloat(document.getElementById('cfgLucasProd').value)||0, lojaProd: parseFloat(document.getElementById('cfgLojaProd').value)||0 }).then(()=>alert("Taxas Salvas!")); 
         }
     </script>
 </body>
