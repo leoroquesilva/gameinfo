@@ -51,13 +51,14 @@
             
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                 <h2 style="margin:0; font-size:1.4rem;">GAME INFO 🎮</h2>
-                <button id="btnConfig" style="background:none; border:none; color:var(--yellow); font-size:1.6rem; cursor:pointer;" onclick="mudar(4)">⚙️</button>
+                <button id="btnConfig" style="background:none; border:none; color:var(--yellow); font-size:1.6rem; cursor:pointer;" onclick="mudar(5)">⚙️</button>
             </div>
 
             <div class="tab-menu">
                 <button class="btn-tab active-tab" id="t1" onclick="mudar(1)">CAIXA</button>
                 <button class="btn-tab" id="t2" onclick="mudar(2)">HISTÓRICO</button>
                 <button class="btn-tab" id="t3" onclick="mudar(3)">ESTOQUE</button>
+                <button class="btn-tab" id="t4" onclick="mudar(4)">DÍVIDAS</button>
             </div>
 
             <div id="aba1">
@@ -146,6 +147,28 @@
             </div>
 
             <div id="aba4" style="display:none;">
+                <div class="card" style="border-color: var(--purple);">
+                    <h2 style="color: var(--purple); margin-top: 0; font-size:1.3rem;">🤝 PAINEL DE DÍVIDAS (DANIEL)</h2>
+                    
+                    <h3>Cadastrar Nova Conta / Empréstimo</h3>
+                    <input type="text" id="dividaNome" placeholder="Descrição (Ex: Nota de 10k / Empréstimo)">
+                    <input type="number" id="dividaTotal" placeholder="Valor Total Inicial R$">
+                    <input type="number" id="dividaPct" placeholder="Porcentagem Retida do Diário (%)" value="0">
+                    <button class="btn" style="background: var(--purple); color: white;" onclick="cadastrarDivida()">Salvar Nova Dívida</button>
+                    
+                    <hr>
+                    <h3>💸 Lançar Pagamento Avulso (Manual)</h3>
+                    <select id="selectDividaAvulso"></select>
+                    <input type="number" id="valorAvulsoDivida" placeholder="Valor Pago R$ (Pix / Dinheiro)">
+                    <button class="btn" style="background: var(--green); color: black;" onclick="lancarPagamentoAvulso()">Confirmar Pagamento Avulso</button>
+
+                    <hr>
+                    <h3>Dívidas Ativas e Saldos Restantes</h3>
+                    <div id="listaDividasCadastradas" style="margin-top: 10px; font-size: 0.85rem;"></div>
+                </div>
+            </div>
+
+            <div id="aba5" style="display:none;">
                 <div class="card">
                     <h2>⚙️ TAXAS ATUAIS</h2>
                     <label>Loja % Serv</label><input type="number" id="cfgLojaServ">
@@ -164,8 +187,10 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore(); const auth = firebase.auth();
         let userN = "", hGeral = [], configGlobal = { lojaServ: 0, lucasServ: 0, lucasProd: 0, lojaProd: 0 }, pEstoque = [], cAtual = [], carrinho = [];
+        let dividasLista = [];
+        let mapaValoresAbatidosCaixa = {}; 
         let isLucas = false;
-        let estadosPagamento = {}; // Armazena localmente quais cards de resumo foram marcados como pagos
+        let estadosPagamento = {}; 
 
         auth.onAuthStateChanged(u => {
             if(u) {
@@ -180,6 +205,7 @@
                     selVend.value = 'LUCAS';
                     document.getElementById('btnConfig').style.display = 'none';
                     document.getElementById('btnArquivar').style.display = 'none';
+                    document.querySelectorAll('.tab-menu .btn-tab')[3].style.display = 'none'; 
                 } else if(userN.includes('DANIEL')) selVend.value = 'DANIEL';
                 else selVend.value = 'LEO';
                 sinc();
@@ -198,6 +224,12 @@
                     document.getElementById('cfgLucasProd').value = configGlobal.lucasProd || 0;
                     renderCaixa(cAtual);
                 }
+            });
+            db.collection("dividas").onSnapshot(s => {
+                dividasLista = [];
+                s.forEach(d => dividasLista.push({ id: d.id, ...d.data() }));
+                renderPainelDividas();
+                renderCaixa(cAtual);
             });
             db.collection("caixa").orderBy("data","desc").onSnapshot(s => { 
                 cAtual = []; s.forEach(d => {
@@ -245,15 +277,10 @@
             const s = document.getElementById('selectPeca');
             const avulsoInput = document.getElementById('nomeAvulso');
             let nome = "", idRef = null, categoria = "Loja";
-            if(s.value === "AVULSO") {
-                nome = avulsoInput.value;
-                categoria = document.getElementById('tVenda').value;
-            } else {
-                const opt = s.options[s.selectedIndex];
-                if(!opt) return;
-                nome = opt.getAttribute('data-nome');
-                idRef = opt.getAttribute('data-id');
-                categoria = opt.getAttribute('data-cat');
+            if(s.value === "AVULSO") { nome = avulsoInput.value; categoria = document.getElementById('tVenda').value; } 
+            else {
+                const opt = s.options[s.selectedIndex]; if(!opt) return;
+                nome = opt.getAttribute('data-nome'); idRef = opt.getAttribute('data-id'); categoria = opt.getAttribute('data-cat');
             }
             const custo = parseFloat(document.getElementById('cust').value) || 0;
             const venda = parseFloat(document.getElementById('vend').value) || 0;
@@ -343,10 +370,9 @@
             document.getElementById('btnCancelarCaixa').style.display = 'none';
         }
 
-        // --- FUNÇÃO PARA MARCAR RESUMO COMO PAGO ---
         function alternarCheckResumo(label) {
             estadosPagamento[label] = !estadosPagamento[label];
-            renderCaixa(cAtual); // Re-renderiza para aplicar a classe CSS
+            renderCaixa(cAtual);
         }
 
         function renderCaixa(items) {
@@ -381,7 +407,26 @@
                 l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}', 'caixa')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)} | <b style="color:${corS}">${i.status}</b></small></div>`;
             });
 
-            // Grid de Resumo com Função de Marcar como Pago
+            mapaValoresAbatidosCaixa = {};
+            let cardsDividasHTML = "";
+            
+            dividasLista.forEach(d => {
+                if (d.ativa && d.porcentagem > 0 && d.saldoRestante > 0) {
+                    let descontoDaVez = tLeo * (d.porcentagem / 100);
+                    if (descontoDaVez > d.saldoRestante) descontoDaVez = d.saldoRestante; 
+                    
+                    tLeo -= descontoDaVez; 
+                    mapaValoresAbatidosCaixa[d.id] = descontoDaVez; 
+
+                    const chaveStatus = `DANIEL (${d.nome.toUpperCase()})`;
+                    cardsDividasHTML += `<div class="item-resumo ${estadosPagamento[chaveStatus] ? 'pago' : ''}" style="border-color: var(--purple); grid-column: span 2;" onclick="alternarCheckResumo('${chaveStatus}')">
+                                            <div class="badge-pago">PAGO ✅</div>
+                                            DANIEL (${d.nome.toUpperCase()}) <small style="color:var(--gray); display:inline;">[Falta R$ ${d.saldoRestante.toFixed(2)}]</small>
+                                            <span>R$ ${descontoDaVez.toFixed(2)}</span>
+                                         </div>`;
+                }
+            });
+
             const criarCardResumo = (label, valor, corBorda = 'var(--gray)') => {
                 const estaPago = estadosPagamento[label] ? 'pago' : '';
                 return `<div class="item-resumo ${estaPago}" style="border-color:${corBorda}" onclick="alternarCheckResumo('${label}')">
@@ -399,8 +444,95 @@
                     criarCardResumo('DANIEL (Sócio)', tDan) +
                     criarCardResumo('JAPÃO (Comissão)', tLc) +
                     criarCardResumo('REINVESTIR LOJA', tInvLoja) +
-                    criarCardResumo('TAXA LOJA', tLj);
+                    criarCardResumo('TAXA LOJA', tLj) +
+                    cardsDividasHTML; 
             }
+        }
+
+        function cadastrarDivida() {
+            const nome = document.getElementById('dividaNome').value;
+            const total = parseFloat(document.getElementById('dividaTotal').value) || 0;
+            const pct = parseFloat(document.getElementById('dividaPct').value) || 0;
+            if(!nome || total <= 0) return alert("Preencha a descrição e o valor correto!");
+            
+            db.collection("dividas").add({ 
+                nome, 
+                totalOriginal: total, 
+                saldoRestante: total, 
+                porcentagem: pct, 
+                ativa: false 
+            }).then(() => {
+                document.getElementById('dividaNome').value = "";
+                document.getElementById('dividaTotal').value = "";
+                document.getElementById('dividaPct').value = "0";
+                alert("Dívida cadastrada!");
+            });
+        }
+
+        function lancarPagamentoAvulso() {
+            const idDivida = document.getElementById('selectDividaAvulso').value;
+            const valorPago = parseFloat(document.getElementById('valorAvulsoDivida').value) || 0;
+            
+            if(!idDivida) return alert("Selecione uma dívida para abater!");
+            if(valorPago <= 0) return alert("Digite um valor válido de pagamento!");
+            
+            const divida = dividasLista.find(d => d.id === idDivida);
+            if(valorPago > divida.saldoRestante) {
+                return alert(`Valor maior que o saldo devedor! O saldo restante atual é R$ ${divida.saldoRestante.toFixed(2)}`);
+            }
+
+            db.collection("dividas").doc(idDivida).update({
+                saldoRestante: firebase.firestore.FieldValue.increment(-valorPago)
+            }).then(() => {
+                document.getElementById('valorAvulsoDivida').value = "";
+                alert(`Pagamento manual de R$ ${valorPago.toFixed(2)} abatido com sucesso!`);
+            });
+        }
+
+        function renderPainelDividas() {
+            const lista = document.getElementById('listaDividasCadastradas');
+            const selectAvulso = document.getElementById('selectDividaAvulso');
+            
+            lista.innerHTML = '';
+            selectAvulso.innerHTML = '<option value="">-- Escolha a Dívida para Abater --</option>';
+
+            if (dividasLista.length === 0) {
+                lista.innerHTML = '<p style="color:var(--gray)">Nenhuma dívida registrada.</p>';
+                return;
+            }
+
+            dividasLista.forEach(d => {
+                const checkAtivo = d.ativa ? 'checked' : '';
+                
+                if (d.saldoRestante > 0) {
+                    selectAvulso.innerHTML += `<option value="${d.id}">${d.nome.toUpperCase()} (Falta R$ ${d.saldoRestante.toFixed(2)})</option>`;
+                }
+
+                lista.innerHTML += `
+                    <div class="card" style="border-top: 2px solid ${d.ativa ? 'var(--green)' : '#333'}; padding: 10px; margin-bottom: 10px; background: #0c0c0c;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <b>${d.nome.toUpperCase()}</b>
+                            <button onclick="if(confirm('Remover esta dívida?')) db.collection('dividas').doc('${d.id}').delete()" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold;">✕</button>
+                        </div>
+                        <div style="margin: 5px 0; color: var(--gray); font-size:0.8rem;">
+                            Original: R$ ${d.totalOriginal.toFixed(2)} | <b style="color: var(--purple)">Falta Abater: R$ ${d.saldoRestante.toFixed(2)}</b>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
+                            <label style="font-size:0.75rem; color:var(--yellow)">% Lucro Léo:</label>
+                            <input type="number" value="${d.porcentagem}" onchange="atualizarRegraDivida('${d.id}', 'porcentagem', this.value)" style="width:60px; padding:4px; font-size:0.75rem; margin:0;">
+                            
+                            <input type="checkbox" ${checkAtivo} id="chk-${d.id}" onchange="atualizarRegraDivida('${d.id}', 'ativa', this.checked)" style="width:18px; margin:0; cursor:pointer;">
+                            <label for="chk-${d.id}" style="font-size:0.75rem; color: ${d.ativa ? 'var(--green)' : 'var(--gray)'}; cursor:pointer;"><b>ATIVADA</b></label>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function atualizarRegraDivida(id, campo, valor) {
+            let dados = {};
+            if (campo === 'porcentagem') dados.porcentagem = parseFloat(valor) || 0;
+            if (campo === 'ativa') dados.ativa = valor;
+            db.collection("dividas").doc(id).update(dados);
         }
 
         function alternarStatus(id, sA, col) { db.collection(col).doc(id).update({ status: sA === 'Pago' ? 'Em Aberto' : 'Pago' }); }
@@ -426,9 +558,9 @@
         function renderHist(dados) {
             const l = document.getElementById('listaHist'); l.innerHTML = '';
             dados.forEach(i => {
-                let corS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
+                let colS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
                 let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : "";
-                l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;"><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoCaixa('${i.id}', 'relatorio')">✏️</button><button class="btn-icon" style="color:var(--yellow);" onclick="reabrir('${i.id}')">📤</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'relatorio')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar do histórico?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada} <span style="color:${corS}">[${i.status.toUpperCase()}]</span></small><br>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor || 'LEO'}]</small><br><small>R$ ${(i.venda||0).toFixed(2)}</small></div>`;
+                l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;"><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoCaixa('${i.id}', 'relatorio')">✏️</button><button class="btn-icon" style="color:var(--yellow);" onclick="reabrir('${i.id}')">📤</button><button class="btn-icon" style="color:${colS};" onclick="alternarStatus('${i.id}', '${i.status}', 'relatorio')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar do histórico?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada} <span style="color:${colS}">[${i.status.toUpperCase()}]</span></small><br>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor || 'LEO'}]</small><br><small>R$ ${(i.venda||0).toFixed(2)}</small></div>`;
             });
         }
 
@@ -469,7 +601,7 @@
 
         function renderEstoqueList() {
             const container = document.getElementById('listaEstoqueAgrupada'); container.innerHTML = '';
-            const categorias = [{ id: 'Leo3D', nome: '🎨 3D Léo' }, { id: 'Serviço', nome: '🔧 Uso em Serviço' }, { id: 'Produto', nome: '📦 Venda Direta' }];
+            const categorias = [{ id: 'Leo3D', nome: '🎨 3D Léo' }, { id: 'Serviço', nome: '🔧 Uso em Serviço' }, { id: 'Produto', nome: '📦 Venda Directa' }];
             categorias.forEach(cat => {
                 const itensCat = pEstoque.filter(p => p.categoria === cat.id).sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1));
                 if (itensCat.length > 0) {
@@ -492,21 +624,36 @@
 
         function cancelarEdicaoPeca() { document.getElementById('editPecaId').value = ''; document.getElementById('nProd').value = ''; document.getElementById('cProd').value = ''; document.getElementById('vSug').value = ''; document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE"; document.getElementById('btnCancelarEdit').style.display = 'none'; }
         
-        function mudar(n) { const ids=['aba1','aba2','aba3','aba4']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
+        function mudar(n) { const ids=['aba1','aba2','aba3','aba4','aba5']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
         
         function arquivar() { 
             if(confirm("Deseja realizar o PIX e arquivar os serviços pagos?")) {
                 db.collection("caixa").where("status", "==", "Pago").get().then(s => {
                     if(s.empty) { alert("Não há pagamentos registrados!"); return; }
-                    s.forEach(d => { db.collection("relatorio").add(d.data()); db.collection("caixa").doc(d.id).delete(); }); 
-                    alert("Arquivado!");
-                    estadosPagamento = {}; // Reseta os checks ao arquivar
+                    
+                    Object.keys(mapaValoresAbatidosCaixa).forEach(idDivida => {
+                        const valorAbatido = mapaValoresAbatidosCaixa[idDivida];
+                        if(valorAbatido > 0) {
+                            db.collection("dividas").doc(idDivida).update({
+                                saldoRestante: firebase.firestore.FieldValue.increment(-valorAbatido)
+                            });
+                        }
+                    });
+
+                    s.forEach(d => { 
+                        db.collection("relatorio").add(d.data()); 
+                        db.collection("caixa").doc(d.id).delete(); 
+                    }); 
+                    
+                    alert("Arquivado com sucesso e saldos das dívidas atualizados!");
+                    estadosPagamento = {}; 
+                    mapaValoresAbatidosCaixa = {};
                 }); 
             }
         }
 
         function salvarConfig() { 
-            db.collection("config").doc("geral").set({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value)||0, lucasServ: parseFloat(document.getElementById('cfgLucasServ').value)||0, lucasProd: parseFloat(document.getElementById('cfgLucasProd').value)||0, lojaProd: parseFloat(document.getElementById('cfgLojaProd').value)||0 }).then(()=>alert("Taxas Salvas!")); 
+            db.collection("config").doc("geral").update({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value)||0, lucasServ: parseFloat(document.getElementById('cfgLucasServ').value)||0, lucasProd: parseFloat(document.getElementById('cfgLucasProd').value)||0, lojaProd: parseFloat(document.getElementById('cfgLojaProd').value)||0 }).then(()=>alert("Taxas Salvas!")); 
         }
     </script>
 </body>
