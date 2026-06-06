@@ -36,7 +36,6 @@
 </head>
 <body>
     <div class="container">
-        <!-- TELA DE LOGIN -->
         <div id="screenLogin" class="screen active">
             <h1 style="color:var(--yellow); margin-top:50px;">GAME INFO</h1>
             <input type="email" id="emailLogin" placeholder="E-mail">
@@ -44,7 +43,6 @@
             <button class="btn" onclick="loginFirebase()">Entrar</button>
         </div>
 
-        <!-- TELA PRINCIPAL DO APP -->
         <div id="screenApp" class="screen">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <span style="font-size:0.7rem;">Olá, <b id="uAtivo" style="color:var(--yellow)">-</b></span>
@@ -63,7 +61,6 @@
                 <button class="btn-tab" id="t4" onclick="mudar(4)">DÍVIDAS</button>
             </div>
 
-            <!-- ABA 1: CAIXA -->
             <div id="aba1">
                 <div class="card">
                     <h2 id="tituloCaixa" style="font-size: 1rem; color: var(--yellow); margin-bottom: 5px;">➕ NOVO LANÇAMENTO</h2>
@@ -108,20 +105,11 @@
                         
                         <div id="areaParcelas" style="display:none;">
                             <label style="font-size: 0.7rem; color: var(--blue); font-weight: bold;">PARCELAS DO CARTÃO:</label>
-                            <select id="qtdParcelas">
+                            <select id="qtdParcelas" onchange="calcularPrevisaoParcela()">
                                 <option value="1">1x (À Vista / Débito)</option>
-                                <option value="2">2x</option>
-                                <option value="3">3x</option>
-                                <option value="4">4x</option>
-                                <option value="5">5x</option>
-                                <option value="6">6x</option>
-                                <option value="7">7x</option>
-                                <option value="8">8x</option>
-                                <option value="9">9x</option>
-                                <option value="10">10x</option>
-                                <option value="11">11x</option>
-                                <option value="12">12x</option>
+                                <option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option><option value="6">6x</option><option value="7">7x</option><option value="8">8x</option><option value="9">9x</option><option value="10">10x</option><option value="11">11x</option><option value="12">12x</option>
                             </select>
+                            <div id="previsaoCartao" style="margin-top:5px; padding:8px; background:#111; border-radius:5px; font-size:0.8rem; color:var(--yellow); border:1px solid #333; display:none;"></div>
                         </div>
 
                         <div id="areaMisto" style="display:none; border: 1px dashed var(--purple); padding: 8px; border-radius: 8px; margin-top: 5px;">
@@ -148,7 +136,6 @@
                 <button id="btnArquivar" class="btn" style="background:#22c55e; color:black;" onclick="arquivar()">PIX FEITO ✅ (Arquivar)</button>
             </div>
 
-            <!-- ABA 2: HISTÓRICO -->
             <div id="aba2" style="display:none;">
                 <div class="card">
                     <h3 style="color:var(--yellow); margin-top:0; font-size:1rem;">📅 FILTRAR PERÍODO</h3>
@@ -166,7 +153,6 @@
                 <div id="listaHist"></div>
             </div>
 
-            <!-- ABA 3: ESTOQUE -->
             <div id="aba3" style="display:none;">
                 <div class="card">
                     <h2 id="tituloEstoque">➕ ESTOQUE</h2>
@@ -197,7 +183,6 @@
                 <div id="listaEstoqueAgrupada"></div>
             </div>
 
-            <!-- ABA 4: DÍVIDAS -->
             <div id="aba4" style="display:none;">
                 <div class="card" style="border-color: var(--purple);">
                     <h2 style="color: var(--purple); margin-top: 0; font-size:1.3rem;">🤝 PAINEL DE DÍVIDAS (DANIEL)</h2>
@@ -217,7 +202,6 @@
                 </div>
             </div>
 
-            <!-- ABA 5: CONFIGURAÇÕES -->
             <div id="aba5" style="display:none;">
                 <div class="card">
                     <h2>⚙️ TAXAS ATUAIS LOJA</h2>
@@ -308,10 +292,28 @@
             db.collection("estoque").onSnapshot(s => { pEstoque = []; s.forEach(d => pEstoque.push({...d.data(), id: d.id})); renderEstoqueList(); renderEstoqueDropdown(); });
         }
 
+        // --- CORREÇÃO APLICADA: Puxar a taxa direto do input da tela para garantir que nunca seja 0% ---
+        function calcularPrevisaoParcela() {
+            const totalVenda = carrinho.reduce((a, b) => a + b.venda, 0);
+            const parc = document.getElementById('qtdParcelas').value;
+            // Lê do input visual, caso não esteja no banco de dados ainda. Substitui vírgula por ponto por segurança.
+            let taxaRaw = document.getElementById('tx' + parc).value || "0";
+            const taxa = parseFloat(taxaRaw.toString().replace(',', '.')) || 0;
+            const valorLiquido = totalVenda * (1 - (taxa / 100));
+            const divPrev = document.getElementById('previsaoCartao');
+            if (totalVenda > 0) {
+                divPrev.style.display = 'block';
+                divPrev.innerHTML = `💳 Taxa InfinityPay (${parc}x): ${taxa}%<br><b>Vai cair na conta: R$ ${valorLiquido.toFixed(2)}</b>`;
+            } else {
+                divPrev.style.display = 'none';
+            }
+        }
+
         function verificarFormaPagamento() {
             const status = document.getElementById('statusVenda').value;
             document.getElementById('areaParcelas').style.display = (status === 'Cartao') ? 'block' : 'none';
             document.getElementById('areaMisto').style.display = (status === 'Misto') ? 'block' : 'none';
+            if (status === 'Cartao') calcularPrevisaoParcela();
         }
 
         function renderEstoqueDropdown() {
@@ -359,6 +361,8 @@
             div.innerHTML = ""; let total = 0;
             carrinho.forEach((item, index) => { total += item.venda; div.innerHTML += `<div class="item-carrinho"><span onclick="editItemCarrinho(${index})">✏️ ${item.nome} <small style="color:var(--purple)">(${item.donoCusto || 'Loja'})</small></span> <span>R$ ${item.venda.toFixed(2)} <button onclick="carrinho.splice(${index},1); renderCarrinho()" style="color:red; background:none; border:none; cursor:pointer; margin-left:10px;">✕</button></span></div>`; });
             if(carrinho.length > 0) { totalDiv.style.display = "block"; totalDiv.innerText = `Total da Venda: R$ ${total.toFixed(2)}`; } else totalDiv.style.display = "none";
+            
+            if (document.getElementById('statusVenda').value === 'Cartao') calcularPrevisaoParcela();
         }
 
         function lancar() {
@@ -432,6 +436,7 @@
             document.getElementById('cust').value = ''; document.getElementById('vend').value = ''; document.getElementById('statusVenda').value = 'Pago';
             document.getElementById('vMistoDinheiro').value = ''; document.getElementById('vMistoCartao').value = '';
             document.getElementById('areaParcelas').style.display = 'none'; document.getElementById('areaMisto').style.display = 'none';
+            document.getElementById('previsaoCartao').style.display = 'none';
             carrinho = []; renderCarrinho(); document.getElementById('tituloCaixa').innerText = "➕ NOVO LANÇAMENTO";
             document.getElementById('btnLancar').innerText = "FINALIZAR LANÇAMENTO"; document.getElementById('btnCancelarCaixa').style.display = 'none';
         }
@@ -468,12 +473,18 @@
 
                 let valorOriginalVendaParaDividirLucro = vV;
 
+                // CORREÇÃO: Lendo do input da tela para garantir segurança
                 if (IsCartaoPuro) {
-                    let p = statusLimpo.split('_')[1] || "1"; let tx = configGlobal['tx' + p] || 0;
-                    vV = vV * (1 - (tx / 100)); totalPresoCartao += vV;
-                    valorOriginalVendaParaDividirLucro = vV;
+                    let p = statusLimpo.split('_')[1] || "1"; 
+                    let taxaRaw = document.getElementById('tx' + p).value || "0";
+                    let tx = parseFloat(taxaRaw.toString().replace(',', '.')) || 0;
+                    let vL = vV * (1 - (tx / 100));
+                    totalPresoCartao += vL;
+                    valorOriginalVendaParaDividirLucro = vL;
                 } else if (IsMisto) {
-                    let p = statusLimpo.split('_')[1] || "1"; let tx = configGlobal['tx' + p] || 0;
+                    let p = statusLimpo.split('_')[1] || "1"; 
+                    let taxaRaw = document.getElementById('tx' + p).value || "0";
+                    let tx = parseFloat(taxaRaw.toString().replace(',', '.')) || 0;
                     let pDin = parseFloat(i.mistoDinheiro) || 0; let pCard = parseFloat(i.mistoCartao) || 0;
                     let pCardLiquido = pCard * (1 - (tx / 100));
                     totalBrutoDia += pDin; totalPresoCartao += pCardLiquido;
@@ -620,11 +631,16 @@
                 let vV = parseFloat(i.venda) || 0, vC = parseFloat(i.custo) || 0; let isLucasVendedor = (i.vendedor === 'LUCAS'); let statusLimpo = i.status || 'Pago';
                 let IsCartaoPuro = statusLimpo.includes('Cartao_'); let IsMisto = statusLimpo.includes('Misto_');
                 
+                // CORREÇÃO: Lendo direto da tela aqui também pro Histórico bater certo
                 if (IsCartaoPuro) {
-                    let p = statusLimpo.split('_')[1] || "1"; let taxaMaquininha = configGlobal['tx' + p] || 0;
+                    let p = statusLimpo.split('_')[1] || "1"; 
+                    let taxaRaw = document.getElementById('tx' + p).value || "0";
+                    let taxaMaquininha = parseFloat(taxaRaw.toString().replace(',', '.')) || 0;
                     vV = vV * (1 - (taxaMaquininha / 100)); totalCartao += vV;
                 } else if(IsMisto) {
-                    let p = statusLimpo.split('_')[1] || "1"; let tx = configGlobal['tx' + p] || 0;
+                    let p = statusLimpo.split('_')[1] || "1"; 
+                    let taxaRaw = document.getElementById('tx' + p).value || "0";
+                    let tx = parseFloat(taxaRaw.toString().replace(',', '.')) || 0;
                     let pDin = parseFloat(i.mistoDinheiro) || 0; let pCard = parseFloat(i.mistoCartao) || 0;
                     let pCardLiquido = pCard * (1 - (tx / 100)); b += pDin; totalCartao += pCardLiquido; vV = pDin + pCardLiquido;
                 } else if (statusLimpo === 'Pago') { b += vV; }
@@ -682,4 +698,3 @@
     </script>
 </body>
 </html>
-
