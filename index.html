@@ -188,6 +188,11 @@
                     <hr>
                     <label>Loja % Prod (sobre lucro)</label><input type="number" id="cfgLojaProd">
                     <label>Lucas % Prod (sobre lucro)</label><input type="number" id="cfgLucasProd">
+                    <hr>
+                    <h3 style="color:var(--purple)">📊 DIVISÃO DE LUCRO SÓCIOS</h3>
+                    <label>Léo % em Serviços</label><input type="number" id="cfgSociosServLeo" value="60">
+                    <label>Léo % em Produtos</label><input type="number" id="cfgSociosProdLeo" value="50">
+                    <p style="font-size:0.7rem; color:var(--gray)">*O restante é repassado automaticamente para o Daniel.</p>
                     <button class="btn" onclick="salvarConfig()">Salvar Novas Taxas</button>
                 </div>
             </div>
@@ -198,7 +203,7 @@
         const firebaseConfig = { apiKey: "AIzaSyCmSqPQ40Emwzu2MDMH_0AxAhkElutWkok", authDomain: "gameinfogestao.firebaseapp.com", projectId: "gameinfogestao", storageBucket: "gameinfogestao.firebasestorage.app", messagingSenderId: "289347667383", appId: "1:289347667383:web:d6e19796f630e5fcaf5432" };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore(); const auth = firebase.auth();
-        let userN = "", hGeral = [], configGlobal = { lojaServ: 0, lucasServ: 0, lucasProd: 0, lojaProd: 0 }, pEstoque = [], cAtual = [], carrinho = [];
+        let userN = "", hGeral = [], configGlobal = { lojaServ: 0, lucasServ: 30, lucasProd: 30, lojaProd: 0, sociosServLeo: 60, sociosProdLeo: 50 }, pEstoque = [], cAtual = [], carrinho = [];
         let dividasLista = [];
         let mapaValoresAbatidosCaixa = {}; 
         let isLucas = false;
@@ -231,9 +236,11 @@
                 if(doc.exists) {
                     configGlobal = doc.data(); 
                     document.getElementById('cfgLojaServ').value = configGlobal.lojaServ || 0;
-                    document.getElementById('cfgLucasServ').value = configGlobal.lucasServ || 0;
+                    document.getElementById('cfgLucasServ').value = configGlobal.lucasServ || 30;
                     document.getElementById('cfgLojaProd').value = configGlobal.lojaProd || 0;
-                    document.getElementById('cfgLucasProd').value = configGlobal.lucasProd || 0;
+                    document.getElementById('cfgLucasProd').value = configGlobal.lucasProd || 30;
+                    document.getElementById('cfgSociosServLeo').value = configGlobal.sociosServLeo || 60;
+                    document.getElementById('cfgSociosProdLeo').value = configGlobal.sociosProdLeo || 50;
                     renderCaixa(cAtual);
                 }
             });
@@ -351,7 +358,7 @@
                 os: document.getElementById('osNum').value, 
                 desc: `${descCliente} (${nomesItens})`,
                 venda: totalVenda, custo: totalCusto,
-                vendedor: document.getElementById('vendedorVenda').value, loginAtivo: userN,
+                vendedor: document.getElementById('vendedorVenda').value, loginAtActive: userN,
                 data: firebase.firestore.Timestamp.fromDate(dataFinal), 
                 dataFormatada: dataFinal.toLocaleDateString('pt-BR'),
                 dataISO: dataInput,
@@ -359,7 +366,7 @@
                 detalhes: carrinho
             };
             if(id) { db.collection(colDestino).doc(id).update(v).then(() => { cancelarEdicaoCaixa(); alert("Alterado!"); }); } 
-            else { db.collection("caixa").add(v).then(() => { carrinho.forEach(item => { if(item.idRef) db.collection("estoque").doc(item.idRef).update({qtd: firebase.firestore.FieldValue.increment(-1)}); }); cancelarEdicaoCaixa(); alert("Venda Lançada com Sucesso!"); }); }
+            else { db.collection("caixa").add(v).then(() => { carrinho.forEach(item => { if(item.idRef) db.collection("estoque").doc(item.idRef).update({qtd: firebase.firestore.FieldValue.increment(-1)}); }); cancelarEdicaoCaixa(); alert("Venda Lançada!"); }); }
         }
 
         function prepararEdicaoCaixa(id, origem = 'caixa') {
@@ -371,7 +378,7 @@
             document.getElementById('desc').value = i.desc.split(' (')[0];
             document.getElementById('statusVenda').value = i.status;
             document.getElementById('vendedorVenda').value = i.vendedor || 'LEO';
-            if(i.detalhes) carrinho = [...i.detalhes]; else carrinho = [{nome: i.desc, custo: i.custo, venda: i.venda, categoria: i.tipo, donoCusto: "Loja"}];
+            if(i.detalhes) carrinho = [...i.detalhes]; else carrinho = [{nome: i.desc, custo: i.custo, venda: i.venda, category: i.tipo, donoCusto: "Loja"}];
             renderCarrinho();
             document.getElementById('tituloCaixa').innerText = "✏️ EDITANDO";
             document.getElementById('btnLancar').innerText = "SALVAR ALTERAÇÃO ✅";
@@ -388,20 +395,33 @@
             document.getElementById('btnCancelarCaixa').style.display = 'none';
         }
 
+        function alternarCheckResumo(label) {
+            estadosPagamento[label] = !estadosPagamento[label];
+            renderCaixa(cAtual);
+        }
+
         function renderCaixa(items) {
             const l = document.getElementById('listaCaixa'); l.innerHTML = '';
-            let tLeo=0, tDan=0, tLc=0, tLj=0, tInvLoja=0, t3DLeoCusto=0;
+            let tLeo=0, tDan=0, tLc=0, tLj=0, t3DLeoCusto=0, totalBrutoDia=0;
             let custoRealLoja=0, custoRealDaniel=0, custoRealLeo=0;
+            
             const txLojServ = configGlobal.lojaServ || 0;
-            const txLucServ = configGlobal.lucasServ || 0;
+            const txLucServ = configGlobal.lucasServ || 30;
             const txLojProd = configGlobal.lojaProd || 0;
-            const txLucProd = configGlobal.lucasProd || 0;
+            const txLucProd = configGlobal.lucasProd || 30;
+            
+            const pctServLeo = configGlobal.sociosServLeo || 60;
+            const pctServDan = 100 - pctServLeo;
+            const pctProdLeo = configGlobal.sociosProdLeo || 50;
+            const pctProdDan = 100 - pctProdLeo;
 
             items.forEach(i => {
                 let vV = parseFloat(i.venda) || 0, vC = parseFloat(i.custo) || 0;
                 let isLucasVendedor = (i.vendedor === 'LUCAS');
                 
                 if (i.status === 'Pago') {
+                    totalBrutoDia += vV;
+
                     if (i.detalhes && i.detalhes.length > 0) {
                         i.detalhes.forEach(det => {
                             let cDet = parseFloat(det.custo) || 0;
@@ -412,28 +432,47 @@
                         });
                     } else { custoRealLoja += vC; }
 
-                    if(i.origem === 'Leo') { t3DLeoCusto += vC; } else { tInvLoja += vC; }
+                    if(i.origem === 'Leo') { t3DLeoCusto += vC; }
+                    
                     let txCobrada = 0, lucroParaDividir = 0;
+                    
                     if(i.tipo === "Serviço") {
-                        txCobrada = vV * (txLojServ/100); lucroParaDividir = vV - txCobrada - vC;
+                        txCobrada = vV * (txLojServ/100); 
+                        lucroParaDividir = vV - txCobrada - vC;
                         let pLc = isLucasVendedor ? (lucroParaDividir * (txLucServ/100)) : 0;
-                        tLc += pLc; tLeo += (lucroParaDividir - pLc) * 0.6; tDan += (lucroParaDividir - pLc) * 0.4;
+                        
+                        tLc += pLc; 
+                        tLeo += (lucroParaDividir - pLc) * (pctServLeo / 100); 
+                        tDan += (lucroParaDividir - pLc) * (pctServDan / 100);
                     } else {
                         let lucroBruto = vV - vC;
-                        txCobrada = lucroBruto * (txLojProd/100); lucroParaDividir = lucroBruto - txCobrada;
+                        txCobrada = lucroBruto * (txLojProd/100); 
+                        lucroParaDividir = lucroBruto - txCobrada;
                         let pLc = isLucasVendedor ? (lucroParaDividir * (txLucProd/100)) : 0;
-                        tLc += pLc; tLeo += (lucroParaDividir - pLc) * 0.5; tDan += (lucroParaDividir - pLc) * 0.5;
+                        
+                        tLc += pLc; 
+                        tLeo += (lucroParaDividir - pLc) * (pctProdLeo / 100); 
+                        tDan += (lucroParaDividir - pLc) * (pctProdDan / 100);
                     }
                     tLj += txCobrada;
                 }
+                
                 let corB = i.origem === 'Leo' ? 'var(--purple)' : (i.tipo === 'Serviço' ? '#0088ff' : '#22c55e');
                 let corS = (i.status === 'Pago') ? 'var(--green)' : 'var(--yellow)';
                 let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : "";
                 l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;"><button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}', 'caixa')">✏️</button><button class="btn-icon" style="color:${corS};" onclick="alternarStatus('${i.id}', '${i.status}', 'caixa')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${vV.toFixed(2)} | C: R$ ${vC.toFixed(2)} | <b style="color:${corS}">${i.status}</b></small></div>`;
             });
 
+            // Lucro limpo puro para a soma do Pix antes dos reembolsos
+            let lucroPuroDaniel = tDan;
+
+            // Soma o reembolso de material direto no bloco de prestação de contas dos sócios
+            tLeo += custoRealLeo;
+            tDan += custoRealDaniel;
+
             mapaValoresAbatidosCaixa = {};
             let cardsDividasHTML = "";
+            let totalDividasRetidasHoje = 0;
             
             dividasLista.forEach(d => {
                 if (d.ativa && d.porcentagem > 0 && d.saldoRestante > 0) {
@@ -442,6 +481,7 @@
                     
                     tLeo -= descontoDaVez; 
                     mapaValoresAbatidosCaixa[d.id] = descontoDaVez; 
+                    totalDividasRetidasHoje += descontoDaVez;
 
                     const chaveStatus = `DANIEL (${d.nome.toUpperCase()})`;
                     cardsDividasHTML += `<div class="item-resumo ${estadosPagamento[chaveStatus] ? 'pago' : ''}" style="border-color: var(--purple); grid-column: span 2;" onclick="alternarCheckResumo('${chaveStatus}')">
@@ -451,6 +491,9 @@
                                          </div>`;
                 }
             });
+
+            // 💸 MATEMÁTICA DO PIX DO DANIEL TRAVADA: Lucro + Material + Abatimento de Dívidas
+            let totalPixDanielReal = lucroPuroDaniel + custoRealDaniel + totalDividasRetidasHoje;
 
             const criarCardResumo = (label, valor, corBorda = 'var(--gray)') => {
                 const estaPago = estadosPagamento[label] ? 'pago' : '';
@@ -464,11 +507,18 @@
                 document.getElementById('gridValores').innerHTML = criarCardResumo('MINHA COMISSÃO (JAPÃO)', tLc, 'var(--green)');
             } else {
                 document.getElementById('gridValores').innerHTML = 
+                    `<div class="item-resumo ${estadosPagamento['TOTAL BRUTO'] ? 'pago':''}" style="border-color: var(--green); grid-column: span 2; background: #0c1a0c;" onclick="alternarCheckResumo('TOTAL BRUTO')">
+                        <div class="badge-pago">PAGO ✅</div>
+                        💰 TOTAL BRUTO DO DIA<span>R$ ${totalBrutoDia.toFixed(2)}</span>
+                     </div>` +
+                    `<div class="item-resumo ${estadosPagamento['PIX TOTAL DANIEL'] ? 'pago':''}" style="border-color: var(--purple); grid-column: span 2; background: #1a0c2a; font-weight:bold;" onclick="alternarCheckResumo('PIX TOTAL DANIEL')">
+                        <div class="badge-pago">PAGO ✅</div>
+                        📱 ENVIAR PIX DANIEL (TOTAL)<span>R$ ${totalPixDanielReal.toFixed(2)}</span>
+                     </div>` +
                     criarCardResumo('3D LÉO', t3DLeoCusto, 'var(--purple)') +
-                    criarCardResumo('LÉO (Sócio)', tLeo) +
-                    criarCardResumo('DANIEL (Sócio)', tDan) +
+                    criarCardResumo('LÉO (Sócio + Material)', tLeo) +
+                    criarCardResumo('DANIEL (Sócio + Material)', tDan) +
                     criarCardResumo('JAPÃO (Comissão)', tLc) +
-                    criarCardResumo('REINVESTIR LOJA', tInvLoja) +
                     criarCardResumo('TAXA LOJA', tLj) +
                     criarCardResumo('MATERIAL LOJA (Insumo)', custoRealLoja, '#ff5500') +
                     criarCardResumo('MATERIAL DANIEL', custoRealDaniel, '#00ffcc') +
@@ -482,7 +532,6 @@
             const total = parseFloat(document.getElementById('dividaTotal').value) || 0;
             const pct = parseFloat(document.getElementById('dividaPct').value) || 0;
             if(!nome || total <= 0) return alert("Preencha a descrição e o valor correto!");
-            
             db.collection("dividas").add({ nome, totalOriginal: total, saldoRestante: total, porcentagem: pct, ativa: false }).then(() => {
                 document.getElementById('dividaNome').value = ""; document.getElementById('dividaTotal').value = ""; document.getElementById('dividaPct').value = "0"; alert("Dívida cadastrada!");
             });
@@ -491,13 +540,10 @@
         function lancarPagamentoAvulso() {
             const idDivida = document.getElementById('selectDividaAvulso').value;
             const valorPago = parseFloat(document.getElementById('valorAvulsoDivida').value) || 0;
-            
             if(!idDivida) return alert("Selecione uma dívida para abater!");
             if(valorPago <= 0) return alert("Digite um valor válido de pagamento!");
-            
             const divida = dividasLista.find(d => d.id === idDivida);
             if(valorPago > divida.saldoRestante) { return alert(`Valor maior que o saldo devedor! Resta R$ ${divida.saldoRestante.toFixed(2)}`); }
-
             db.collection("dividas").doc(idDivida).update({ saldoRestante: firebase.firestore.FieldValue.increment(-valorPago) }).then(() => {
                 document.getElementById('valorAvulsoDivida').value = ""; alert(`Pagamento manual de R$ ${valorPago.toFixed(2)} abatido!`);
             });
@@ -507,29 +553,11 @@
             const lista = document.getElementById('listaDividasCadastradas');
             const selectAvulso = document.getElementById('selectDividaAvulso');
             lista.innerHTML = ''; selectAvulso.innerHTML = '<option value="">-- Escolha a Dívida para Abater --</option>';
-
             if (dividasLista.length === 0) { lista.innerHTML = '<p style="color:var(--gray)">Nenhuma dívida registrada.</p>'; return; }
-
             dividasLista.forEach(d => {
                 const checkAtivo = d.ativa ? 'checked' : '';
                 if (d.saldoRestante > 0) { selectAvulso.innerHTML += `<option value="${d.id}">${d.nome.toUpperCase()} (Falta R$ ${d.saldoRestante.toFixed(2)})</option>`; }
-
-                lista.innerHTML += `
-                    <div class="card" style="border-top: 2px solid ${d.ativa ? 'var(--green)' : '#333'}; padding: 10px; margin-bottom: 10px; background: #0c0c0c;">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <b>${d.nome.toUpperCase()}</b>
-                            <button onclick="if(confirm('Remover esta dívida?')) db.collection('dividas').doc('${d.id}').delete()" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold;">✕</button>
-                        </div>
-                        <div style="margin: 5px 0; color: var(--gray); font-size:0.8rem;">
-                            Original: R$ ${d.totalOriginal.toFixed(2)} | <b style="color: var(--purple)">Falta Abater: R$ ${d.saldoRestante.toFixed(2)}</b>
-                        </div>
-                        <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
-                            <label style="font-size:0.75rem; color:var(--yellow)">% Lucro Léo:</label>
-                            <input type="number" value="${d.porcentagem}" onchange="atualizarRegraDivida('${d.id}', 'porcentagem', this.value)" style="width:60px; padding:4px; font-size:0.75rem; margin:0;">
-                            <input type="checkbox" ${checkAtivo} id="chk-${d.id}" onchange="atualizarRegraDivida('${d.id}', 'ativa', this.checked)" style="width:18px; margin:0; cursor:pointer;">
-                            <label for="chk-${d.id}" style="font-size:0.75rem; color: ${d.ativa ? 'var(--green)' : 'var(--gray)'}; cursor:pointer;"><b>ATIVADA</b></label>
-                        </div>
-                    </div>`;
+                lista.innerHTML += `<div class="card" style="border-top: 2px solid ${d.ativa ? 'var(--green)' : '#333'}; padding: 10px; margin-bottom: 10px; background: #0c0c0c;"><div style="display:flex; justify-content:space-between; align-items:center;"><b>${d.nome.toUpperCase()}</b><button onclick="if(confirm('Remover esta dívida?')) db.collection('dividas').doc('${d.id}').delete()" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold;">✕</button></div><div style="margin: 5px 0; color: var(--gray); font-size:0.8rem;">Original: R$ ${d.totalOriginal.toFixed(2)} | <b style="color: var(--purple)">Falta Abater: R$ ${d.saldoRestante.toFixed(2)}</b></div><div style="display:flex; gap:10px; align-items:center; margin-top:8px;"><label style="font-size:0.75rem; color:var(--yellow)">% Lucro Léo:</label><input type="number" value="${d.porcentagem}" onchange="atualizarRegraDivida('${d.id}', 'porcentagem', this.value)" style="width:60px; padding:4px; font-size:0.75rem; margin:0;"><input type="checkbox" ${checkAtivo} id="chk-${d.id}" onchange="atualizarRegraDivida('${d.id}', 'ativa', this.checked)" style="width:18px; margin:0; cursor:pointer;"><label for="chk-${d.id}" style="font-size:0.75rem; color: ${d.ativa ? 'var(--green)' : 'var(--gray)'}; cursor:pointer;"><b>ATIVADA</b></label></div></div>`;
             });
         }
 
@@ -572,12 +600,12 @@
                     if(i.tipo === "Serviço") {
                         tx = vV * (configGlobal.lojaServ/100); lucFinal = vV - tx - vC;
                         let pLc = isLucasVendedor ? lucFinal * (configGlobal.lucasServ/100) : 0;
-                        lucas += pLc; leo += (lucFinal-pLc)*0.6; dan += (lucFinal-pLc)*0.4;
+                        lucas += pLc; leo += (lucFinal-pLc)*(configGlobal.sociosServLeo/100); dan += (lucFinal-pLc)*(100 - configGlobal.sociosServLeo/100);
                     } else {
                         let lucroBruto = vV - vC;
                         tx = lucroBruto * (configGlobal.lojaProd/100); lucFinal = lucroBruto - tx;
                         let pLc = isLucasVendedor ? lucFinal * (configGlobal.lucasProd/100) : 0;
-                        lucas += pLc; leo += (lucFinal-pLc)*0.5; dan += (lucFinal-pLc)*0.5;
+                        lucas += pLc; leo += (lucFinal-pLc)*(configGlobal.sociosProdLeo/100); dan += (lucFinal-pLc)*(100 - configGlobal.sociosProdLeo/100);
                     }
                     loja += tx;
                 }
@@ -607,7 +635,7 @@
         function addEstoque() {
             const id = document.getElementById('editPecaId').value, n = document.getElementById('nProd').value, c = document.getElementById('cProd').value, v = document.getElementById('vSug').value, q = parseInt(document.getElementById('qProd').value), cat = document.getElementById('catProd').value, fav = document.getElementById('favProd').checked;
             const dono = document.getElementById('catDonoCustEstoque').value || "Loja";
-            const dados = {nome:n, custo:parseFloat(c)||0, vendaSugerida:parseFloat(v)||0, qtd:q, categoria:cat, favorito: fav, donoCusto: dono};
+            const dados = {nome:n, custo:parseFloat(c)||0, vendaSugerida:parseFloat(v)||0, qtd:q, category:cat, favorito: fav, donoCusto: dono};
             if(id) db.collection("estoque").doc(id).update(dados).then(() => cancelarEdicaoPeca());
             else db.collection("estoque").add(dados).then(() => { document.getElementById('nProd').value=''; document.getElementById('cProd').value=''; document.getElementById('vSug').value=''; });
         }
@@ -619,21 +647,17 @@
         }
 
         function cancelarEdicaoPeca() { document.getElementById('editPecaId').value = ''; document.getElementById('nProd').value = ''; document.getElementById('cProd').value = ''; document.getElementById('vSug').value = ''; document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE"; document.getElementById('btnCancelarEdit').style.display = 'none'; }
-        
         function mudar(n) { const ids=['aba1','aba2','aba3','aba4','aba5']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
         
         function arquivar() { 
             if(confirm("Deseja realizar o PIX e arquivar os serviços pagos?")) {
                 db.collection("caixa").where("status", "==", "Pago").get().then(s => {
                     if(s.empty) { alert("Não há pagamentos registrados!"); return; }
-                    
                     Object.keys(mapaValoresAbatidosCaixa).forEach(idDivida => {
                         const valorAbatido = mapaValoresAbatidosCaixa[idDivida];
                         if(valorAbatido > 0) { db.collection("dividas").doc(idDivida).update({ saldoRestante: firebase.firestore.FieldValue.increment(-valorAbatido) }); }
                     });
-
                     s.forEach(d => { db.collection("relatorio").add(d.data()); db.collection("caixa").doc(d.id).delete(); }); 
-                    
                     alert("Arquivado com sucesso e saldos das dívidas atualizados!");
                     estadosPagamento = {}; mapaValoresAbatidosCaixa = {};
                 }); 
@@ -641,7 +665,14 @@
         }
 
         function salvarConfig() { 
-            db.collection("config").doc("geral").update({ lojaServ: parseFloat(document.getElementById('cfgLojaServ').value)||0, lucasServ: parseFloat(document.getElementById('cfgLucasServ').value)||0, lucasProd: parseFloat(document.getElementById('cfgLucasProd').value)||0, lojaProd: parseFloat(document.getElementById('cfgLojaProd').value)||0 }).then(()=>alert("Taxas Salvas!")); 
+            db.collection("config").doc("geral").update({ 
+                lojaServ: parseFloat(document.getElementById('cfgLojaServ').value)||0, 
+                lucasServ: parseFloat(document.getElementById('cfgLucasServ').value)||30, 
+                lucasProd: parseFloat(document.getElementById('cfgLucasProd').value)||30, 
+                lojaProd: parseFloat(document.getElementById('cfgLojaProd').value)||0,
+                sociosServLeo: parseFloat(document.getElementById('cfgSociosServLeo').value)||60,
+                sociosProdLeo: parseFloat(document.getElementById('cfgSociosProdLeo').value)||50
+            }).then(()=>alert("Configurações e Porcentagens Salvas!")); 
         }
     </script>
 </body>
