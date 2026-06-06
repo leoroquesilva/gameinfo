@@ -36,6 +36,7 @@
 </head>
 <body>
     <div class="container">
+        <!-- TELA DE LOGIN -->
         <div id="screenLogin" class="screen active">
             <h1 style="color:var(--yellow); margin-top:50px;">GAME INFO</h1>
             <input type="email" id="emailLogin" placeholder="E-mail">
@@ -43,6 +44,7 @@
             <button class="btn" onclick="loginFirebase()">Entrar</button>
         </div>
 
+        <!-- TELA PRINCIPAL DO APP -->
         <div id="screenApp" class="screen">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <span style="font-size:0.7rem;">Olá, <b id="uAtivo" style="color:var(--yellow)">-</b></span>
@@ -61,6 +63,7 @@
                 <button class="btn-tab" id="t4" onclick="mudar(4)">DÍVIDAS</button>
             </div>
 
+            <!-- ABA 1: CAIXA -->
             <div id="aba1">
                 <div class="card">
                     <h2 id="tituloCaixa" style="font-size: 1rem; color: var(--yellow); margin-bottom: 5px;">➕ NOVO LANÇAMENTO</h2>
@@ -145,6 +148,7 @@
                 <button id="btnArquivar" class="btn" style="background:#22c55e; color:black;" onclick="arquivar()">PIX FEITO ✅ (Arquivar)</button>
             </div>
 
+            <!-- ABA 2: HISTÓRICO -->
             <div id="aba2" style="display:none;">
                 <div class="card">
                     <h3 style="color:var(--yellow); margin-top:0; font-size:1rem;">📅 FILTRAR PERÍODO</h3>
@@ -162,6 +166,7 @@
                 <div id="listaHist"></div>
             </div>
 
+            <!-- ABA 3: ESTOQUE -->
             <div id="aba3" style="display:none;">
                 <div class="card">
                     <h2 id="tituloEstoque">➕ ESTOQUE</h2>
@@ -192,6 +197,7 @@
                 <div id="listaEstoqueAgrupada"></div>
             </div>
 
+            <!-- ABA 4: DÍVIDAS -->
             <div id="aba4" style="display:none;">
                 <div class="card" style="border-color: var(--purple);">
                     <h2 style="color: var(--purple); margin-top: 0; font-size:1.3rem;">🤝 PAINEL DE DÍVIDAS (DANIEL)</h2>
@@ -211,6 +217,7 @@
                 </div>
             </div>
 
+            <!-- ABA 5: CONFIGURAÇÕES -->
             <div id="aba5" style="display:none;">
                 <div class="card">
                     <h2>⚙️ TAXAS ATUAIS LOJA</h2>
@@ -374,7 +381,7 @@
                 let parcM = document.getElementById('qtdParcelasMisto').value;
                 
                 if((vDin + vCard) !== totalVenda) {
-                    return alert(`A soma das partes (R$ ${vDin + vCard}) está diferente do total geral da venda (R$ ${totalVenda})! Reajuste os valores.`);
+                    return alert(`A soma das partes está diferente do total geral!`);
                 }
                 statusFinal = 'Misto_' + parcM;
                 metadadosMisto = { mistoDinheiro: vDin, mistoCartao: vCard };
@@ -437,6 +444,11 @@
             db.collection('caixa').doc(id).update({ status: novoStatus });
         }
 
+        function alternarCheckResumo(label) {
+            estadosPagamento[label] = !estadosPagamento[label];
+            renderCaixa(cAtual);
+        }
+
         function renderCaixa(items) {
             const l = document.getElementById('listaCaixa'); l.innerHTML = '';
             let tLeo=0, tDan=0, tLc=0, tLj=0, t3DLeoCusto=0, totalBrutoDia=0, totalPresoCartao=0;
@@ -456,29 +468,20 @@
 
                 let valorOriginalVendaParaDividirLucro = vV;
 
-                // Aplica taxa nos pagamentos e separa as caixas de noite
                 if (IsCartaoPuro) {
-                    let p = statusLimpo.split('_')[1] || "1";
-                    let tx = configGlobal['tx' + p] || 0;
-                    vV = vV * (1 - (tx / 100)); // Valor Líquido Real que vai cair na conta
-                    totalPresoCartao += vV;
+                    let p = statusLimpo.split('_')[1] || "1"; let tx = configGlobal['tx' + p] || 0;
+                    vV = vV * (1 - (tx / 100)); totalPresoCartao += vV;
                     valorOriginalVendaParaDividirLucro = vV;
                 } else if (IsMisto) {
-                    let p = statusLimpo.split('_')[1] || "1";
-                    let tx = configGlobal['tx' + p] || 0;
-                    let pDin = parseFloat(i.mistoDinheiro) || 0;
-                    let pCard = parseFloat(i.mistoCartao) || 0;
-                    
-                    let pCardLiquido = pCard * (1 - (tx / 100)); // Desconta a maquininha só da parte do cartão
-                    totalBrutoDia += pDin; // O dinheiro cai na hora
-                    totalPresoCartao += pCardLiquido; // O cartão fica preso
-                    
-                    valorOriginalVendaParaDividirLucro = pDin + pCardLiquido; // O lucro real da venda cai sobre o líquido total
+                    let p = statusLimpo.split('_')[1] || "1"; let tx = configGlobal['tx' + p] || 0;
+                    let pDin = parseFloat(i.mistoDinheiro) || 0; let pCard = parseFloat(i.mistoCartao) || 0;
+                    let pCardLiquido = pCard * (1 - (tx / 100));
+                    totalBrutoDia += pDin; totalPresoCartao += pCardLiquido;
+                    valorOriginalVendaParaDividirLucro = pDin + pCardLiquido;
                 } else if (IsPagoPix) {
                     totalBrutoDia += vV;
                 }
 
-                // MATEMÁTICA CENTRALIZADA DO LUCRO (Não quebra o custo da fonte!)
                 if (IsPagoPix || IsCartaoPuro || IsMisto) {
                     let totalCustoItem = 0;
                     if (i.detalhes && i.detalhes.length > 0) {
@@ -499,18 +502,13 @@
                         lucroParaDividir = valorOriginalVendaParaDividirLucro - txCobrada - totalCustoItem;
                         let pLc = isLucasVendedor ? (lucroParaDividir * ((configGlobal.lucasServ || 30)/100)) : 0;
                         tLc += pLc; 
-                        
-                        // Garante a divisão proporcional perfeita sem sumir com dinheiro
-                        tLeo += (lucroParaDividir - pLc) * (pctServLeo / 100); 
-                        tDan += (lucroParaDividir - pLc) * (pctServDan / 100);
+                        tLeo += (lucroParaDividir - pLc) * (pctServLeo / 100); tDan += (lucroParaDividir - pLc) * (pctServDan / 100);
                     } else {
                         let lucroBruto = valorOriginalVendaParaDividirLucro - totalCustoItem;
                         txCobrada = lucroBruto * ((configGlobal.lojaProd || 0)/100); lucroParaDividir = lucroBruto - txCobrada;
                         let pLc = isLucasVendedor ? (lucroParaDividir * ((configGlobal.lucasProd || 30)/100)) : 0;
                         tLc += pLc; 
-                        
-                        tLeo += (lucroParaDividir - pLc) * (pctProdLeo / 100); 
-                        tDan += (lucroParaDividir - pLc) * (pctProdDan / 100);
+                        tLeo += (lucroParaDividir - pLc) * (pctProdLeo / 100); tDan += (lucroParaDividir - pLc) * (pctProdDan / 100);
                     }
                     tLj += txCobrada;
                 }
@@ -538,7 +536,6 @@
                 }
             });
 
-            // 💸 O PIX DO DANIEL REAL TRAVA APENAS EM CIMA DO DINHEIRO DO DIA
             let totalPixDanielReal = lucroPuroDaniel + custoRealDaniel + totalDividasRetidasHoje;
 
             const criarCardResumo = (label, valor, corBorda = 'var(--gray)') => {
@@ -621,8 +618,7 @@
             let b=0, m3d=0, invest=0, loja=0, lucas=0, leo=0, dan=0, totalCartao=0;
             dados.forEach(i => {
                 let vV = parseFloat(i.venda) || 0, vC = parseFloat(i.custo) || 0; let isLucasVendedor = (i.vendedor === 'LUCAS'); let statusLimpo = i.status || 'Pago';
-                let IsCartaoPuro = statusLimpo.includes('Cartao_');
-                let IsMisto = statusLimpo.includes('Misto_');
+                let IsCartaoPuro = statusLimpo.includes('Cartao_'); let IsMisto = statusLimpo.includes('Misto_');
                 
                 if (IsCartaoPuro) {
                     let p = statusLimpo.split('_')[1] || "1"; let taxaMaquininha = configGlobal['tx' + p] || 0;
@@ -630,9 +626,7 @@
                 } else if(IsMisto) {
                     let p = statusLimpo.split('_')[1] || "1"; let tx = configGlobal['tx' + p] || 0;
                     let pDin = parseFloat(i.mistoDinheiro) || 0; let pCard = parseFloat(i.mistoCartao) || 0;
-                    let pCardLiquido = pCard * (1 - (tx / 100));
-                    b += pDin; totalCartao += pCardLiquido;
-                    vV = pDin + pCardLiquido;
+                    let pCardLiquido = pCard * (1 - (tx / 100)); b += pDin; totalCartao += pCardLiquido; vV = pDin + pCardLiquido;
                 } else if (statusLimpo === 'Pago') { b += vV; }
 
                 if (statusLimpo === 'Pago' || IsCartaoPuro || IsMisto) {
@@ -641,13 +635,11 @@
                     if(i.tipo === "Serviço") {
                         tx = vV * ((configGlobal.lojaServ || 0)/100); lucFinal = vV - tx - vC;
                         let pLc = isLucasVendedor ? lucFinal * ((configGlobal.lucasServ || 30)/100) : 0;
-                        lucas += pLc; 
-                        leo += (lucFinal-pLc)*(configGlobal.sociosServLeo/100); dan += (lucFinal-pLc)*(100 - configGlobal.sociosServLeo/100);
+                        lucas += pLc; leo += (lucFinal-pLc)*(configGlobal.sociosServLeo/100); dan += (lucFinal-pLc)*(100 - configGlobal.sociosServLeo/100);
                     } else {
                         let lucroBruto = vV - vC; tx = lucroBruto * ((configGlobal.lojaProd || 0)/100); lucFinal = lucroBruto - tx;
                         let pLc = isLucasVendedor ? lucFinal * ((configGlobal.lucasProd || 30)/100) : 0;
-                        lucas += pLc; 
-                        leo += (lucFinal-pLc)*(configGlobal.sociosProdLeo/100); dan += (lucFinal-pLc)*(100 - configGlobal.sociosProdLeo/100);
+                        lucas += pLc; leo += (lucFinal-pLc)*(configGlobal.sociosProdLeo/100); dan += (lucFinal-pLc)*(100 - configGlobal.sociosProdLeo/100);
                     }
                     loja += tx;
                 }
@@ -686,6 +678,8 @@
             for(let f=1; f<=12; f++) { obj['tx'+f] = parseFloat(document.getElementById('tx'+f).value)||0; }
             db.collection("config").doc("geral").update(obj).then(()=>alert("Configurações salvas!")); 
         }
+        function mudar(n) { const ids=['aba1','aba2','aba3','aba4','aba5']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
     </script>
 </body>
 </html>
+
