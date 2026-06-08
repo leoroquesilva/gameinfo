@@ -132,8 +132,6 @@
                     <button id="btnCancelarCaixa" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoCaixa()">Cancelar Edição</button>
                 </div>
                 
-                <div id="resumoDetalhadoDia" style="display:none; background: #0c0c0c; padding: 10px; border-radius: 8px; border: 1px dashed var(--gray); margin-bottom: 15px; font-size: 0.85rem;"></div>
-                
                 <div id="gridValores" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;"></div>
                 <div id="listaCaixa" style="max-height:300px; overflow-y:auto;"></div>
                 <button id="btnArquivar" class="btn" style="background:#22c55e; color:black;" onclick="arquivar()">PIX FEITO ✅ (Arquivar Caixa)</button>
@@ -540,7 +538,6 @@
             }
         }
 
-        // === NOVA FUNÇÃO DE REABRIR O DIA TODO ===
         function reabrirDiaCompleto() {
             const dIni = document.getElementById('dataInicioFiltro').value;
             if(!dIni) return alert("Por favor, selecione uma data no campo 'Data Início' para reabrir!");
@@ -565,8 +562,8 @@
 
             Promise.all(promessas).then(() => {
                 alert("Dia reaberto com sucesso! O painel do Caixa foi atualizado.");
-                mudar(1); // Volta pro painel Caixa
-                document.getElementById('dataInicioFiltro').value = ''; // Limpa o filtro
+                mudar(1); 
+                document.getElementById('dataInicioFiltro').value = ''; 
             }).catch(e => alert("Erro ao reabrir dia: " + e));
         }
 
@@ -604,6 +601,37 @@
         function addEstoque() { const id = document.getElementById('editPecaId').value, n = document.getElementById('nProd').value, c = document.getElementById('cProd').value, v = document.getElementById('vSug').value, q = parseInt(document.getElementById('qProd').value), cat = document.getElementById('catProd').value, fav = document.getElementById('favProd').checked; const dono = document.getElementById('catDonoCustEstoque').value || "Loja"; const dados = {nome:n, custo:parseFloat(c)||0, vendaSugerida:parseFloat(v)||0, qtd:q, categoria:cat, favorito: fav, donoCusto: dono}; if(id) db.collection("estoque").doc(id).update(dados).then(() => cancelarEdicaoPeca()); else db.collection("estoque").add(dados).then(() => { document.getElementById('nProd').value=''; document.getElementById('cProd').value=''; document.getElementById('vSug').value=''; }); }
         function salvarConfig() { let obj = { lojaServ: parseFloat(document.getElementById('cfgLojaServ').value)||0, lucasServ: parseFloat(document.getElementById('cfgLucasServ').value)||30, sociosServLeo: parseFloat(document.getElementById('cfgSociosServLeo').value)||60, sociosProdLeo: parseFloat(document.getElementById('cfgSociosProdLeo').value)||50 }; for(let f=1; f<=12; f++) { obj['tx'+f] = parseFloat(document.getElementById('tx'+f).value)||0; } db.collection("config").doc("geral").update(obj).then(()=>alert("Configurações salvas!")); }
         function mudar(n) { const ids=['aba1','aba2','aba3','aba4','aba5']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
+
+        // --- FUNÇÕES INJETADAS ---
+        function prepararEdicaoPeca(id, n, c, v, q, cat, fav, dono) {
+            document.getElementById('editPecaId').value = id;
+            document.getElementById('nProd').value = n;
+            document.getElementById('cProd').value = c;
+            document.getElementById('vSug').value = v;
+            document.getElementById('qProd').value = q;
+            document.getElementById('catProd').value = cat;
+            document.getElementById('favProd').checked = (fav === true || String(fav) === "true");
+            document.getElementById('catDonoCustEstoque').value = dono || 'Loja';
+            document.getElementById('tituloEstoque').innerText = "✏️ EDITANDO ESTOQUE";
+            document.getElementById('btnSalvarEstoque').innerText = "Salvar Alteração";
+            document.getElementById('btnCancelarEdit').style.display = 'inline-block';
+            window.scrollTo(0, 0);
+        }
+
+        function cancelarEdicaoPeca() {
+            document.getElementById('editPecaId').value = '';
+            document.getElementById('nProd').value = '';
+            document.getElementById('cProd').value = '';
+            document.getElementById('vSug').value = '';
+            document.getElementById('qProd').value = '1';
+            document.getElementById('catProd').value = 'Serviço';
+            document.getElementById('favProd').checked = false;
+            document.getElementById('catDonoCustEstoque').value = 'Loja';
+            document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE";
+            document.getElementById('btnSalvarEstoque').innerText = "Salvar";
+            document.getElementById('btnCancelarEdit').style.display = 'none';
+        }
     </script>
 </body>
 </html>
+
