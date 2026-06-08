@@ -148,7 +148,6 @@
                     </div>
                     <input type="text" id="busca" placeholder="🔍 Filtrar por O.S. ou Descrição..." onkeyup="filtrar()">
                     
-                    <!-- NOVOS BOTÕES DIVIDIDOS NO HISTÓRICO -->
                     <div style="display:flex; gap:5px; margin-top: 10px;">
                         <button class="btn" style="background:var(--blue); color:white; flex:1; margin-top:0; padding:10px; font-size: 0.75rem;" onclick="gerarRelatorioFiltrado()">📊 GERAR RELATÓRIO</button>
                         <button class="btn" style="background:var(--yellow); color:black; flex:1; margin-top:0; padding:10px; font-size: 0.75rem;" onclick="reabrirDiaCompleto()">🔄 REABRIR DIA</button>
@@ -388,9 +387,9 @@
 
         function alternarCheckResumo(label) { estadosPagamento[label] = !estadosPagamento[label]; renderCaixa(cAtual); }
         
-        function marcarComoRecebido(id) { 
-            if(confirm('O dinheiro dessa venda em cartão (ou em aberto) já CAIU NA CONTA hoje? \n\nIsso vai transformar a venda em PIX e somar o lucro dela para distribuir no dia de hoje.')) { 
-                db.collection('caixa').doc(id).update({ status: 'Pago' }); 
+        function marcarComoRecebido(id, valorLiqCalculado) { 
+            if(confirm(`Confirmar recebimento?\n\nO sistema vai lançar o valor LÍQUIDO (já com taxas) de: R$ ${valorLiqCalculado.toFixed(2)}`)) { 
+                db.collection('caixa').doc(id).update({ status: 'Pago', valorLiquidoRecebido: valorLiqCalculado }); 
             } 
         }
 
@@ -417,30 +416,35 @@
 
             let t3DLeoCusto=0, totalBrutoDia=0, totalPresoCartao=0;
             let custoRealLoja=0, custoRealDaniel=0, custoRealLeo=0;
-            let totalBrutoServicos = 0, lucroPuroServicos = 0, totalBrutoProdutos = 0, lucroPuroProdutos = 0;
             
             const pctServLeo = configGlobal.sociosServLeo || 60; const pctServDan = 100 - pctServLeo;
             const pctProdLeo = configGlobal.sociosProdLeo || 50; const pctProdDan = 100 - pctProdLeo;
 
             items.forEach(i => {
-                let vV = parseFloat(i.venda) || 0, vC = parseFloat(i.custo) || 0;
+                let vV = i.valorLiquidoRecebido || parseFloat(i.venda) || 0;
+                let vC = parseFloat(i.custo) || 0;
                 let isLucasVendedor = (i.vendedor === 'LUCAS'); let statusLimpo = i.status || 'Pago';
                 
                 let IsCartaoPuro = statusLimpo.includes('Cartao_'); let IsMisto = statusLimpo.includes('Misto_'); let IsPagoPix = statusLimpo === 'Pago';
 
                 let vPix = 0; let vCard = 0;
+                let vLiquidoCalculado = 0; 
+
                 if (IsCartaoPuro) {
                     let p = statusLimpo.split('_')[1] || "1"; let taxaRaw = document.getElementById('tx' + p).value || "0";
                     let tx = parseFloat(taxaRaw.toString().replace(',', '.')) || 0;
                     vCard = vV * (1 - (tx / 100)); totalPresoCartao += vCard;
+                    vLiquidoCalculado = vCard;
                 } else if (IsMisto) {
                     let p = statusLimpo.split('_')[1] || "1"; let taxaRaw = document.getElementById('tx' + p).value || "0";
                     let tx = parseFloat(taxaRaw.toString().replace(',', '.')) || 0;
                     vPix = parseFloat(i.mistoDinheiro) || 0;
                     vCard = (parseFloat(i.mistoCartao) || 0) * (1 - (tx / 100));
                     totalBrutoDia += vPix; totalPresoCartao += vCard;
+                    vLiquidoCalculado = vPix + vCard;
                 } else if (IsPagoPix) {
                     vPix = vV; totalBrutoDia += vPix;
+                    vLiquidoCalculado = vPix;
                 }
 
                 let totalVendaLiquida = vPix + vCard;
@@ -463,23 +467,19 @@
                     let txCobrada = 0, lucroParaDividir = 0, pLc = 0, pLeo = 0, pDan = 0;
                     
                     if(i.tipo === "Serviço") {
-                        totalBrutoServicos += totalVendaLiquida;
                         let lucroBrutoServico = totalVendaLiquida - totalCustoItem; 
                         txCobrada = lucroBrutoServico > 0 ? lucroBrutoServico * ((configGlobal.lojaServ || 0)/100) : 0; 
                         lucroParaDividir = lucroBrutoServico - txCobrada;
                         pLc = isLucasVendedor ? (lucroParaDividir * ((configGlobal.lucasServ || 30)/100)) : 0;
                         pLeo = (lucroParaDividir - pLc) * (pctServLeo / 100);
                         pDan = (lucroParaDividir - pLc) * (pctServDan / 100);
-                        lucroPuroServicos += (lucroParaDividir - pLc);
                     } else {
-                        totalBrutoProdutos += totalVendaLiquida;
                         let lucroBruto = totalVendaLiquida - totalCustoItem;
                         txCobrada = lucroBruto > 0 ? lucroBruto * ((configGlobal.lojaProd || 0)/100) : 0; 
                         lucroParaDividir = lucroBruto - txCobrada;
                         pLc = isLucasVendedor ? (lucroParaDividir * ((configGlobal.lucasProd || 30)/100)) : 0;
                         pLeo = (lucroParaDividir - pLc) * (pctProdLeo / 100);
                         pDan = (lucroParaDividir - pLc) * (pctProdDan / 100);
-                        lucroPuroProdutos += (lucroParaDividir - pLc);
                     }
 
                     tLjPix += txCobrada * ratioPix; tLjCard += txCobrada * ratioCard;
@@ -489,14 +489,19 @@
                 }
                 
                 let corB = i.origem === 'Leo' ? 'var(--purple)' : (i.tipo === 'Serviço' ? '#0088ff' : '#22c55e');
+                
                 let txtStatus = "✅ PIX/Dinheiro", corS = 'var(--green)';
-                if(IsCartaoPuro) { txtStatus = `💳 Cartão ${statusLimpo.split('_')[1]}x`; corS = 'var(--blue)'; }
-                if(IsMisto) { txtStatus = `🔀 Misto (${statusLimpo.split('_')[1]}x)`; corS = 'var(--purple)'; }
-                if(statusLimpo === 'Em Aberto') { txtStatus = "⏳ Aberto"; corS = 'var(--yellow)'; }
+                if(IsCartaoPuro) { txtStatus = `💳 Cartão ${statusLimpo.split('_')[1] || ''}x`; corS = 'var(--yellow)'; }
+                if(IsMisto) { txtStatus = `🔀 Misto ${statusLimpo.split('_')[1] || ''}x`; corS = 'var(--purple)'; }
+                if(statusLimpo === 'Em Aberto') { txtStatus = "⏳ Aberto"; corS = 'var(--red)'; }
 
-                let btnReceber = (IsCartaoPuro || statusLimpo === 'Em Aberto') ? `<button class="btn-icon" style="background:#22c55e; color:black; font-size:1rem; margin-right:5px; padding:3px 8px; border-radius:5px;" onclick="marcarComoRecebido('${i.id}')" title="Marcar como Recebido Hoje">💰 CAIU!</button>` : '';
+                let btnReceber = (!IsPagoPix) ? `<button class="btn-icon" style="background:#22c55e; color:black; font-size:0.8rem; margin-right:5px; padding:3px 8px; border-radius:5px;" onclick="marcarComoRecebido('${i.id}', ${vLiquidoCalculado})" title="Marcar como Recebido Hoje">💰 CAIU!</button>` : '';
                 let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : "";
-                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;">${btnReceber}<button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}', 'caixa')">✏️</button><button class="btn-icon" style="color:${corS}; font-size:1.1rem;" onclick="alternarStatusCaixaRapido('${i.id}', '${statusLimpo}')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${(parseFloat(i.venda)||0).toFixed(2)} | C: R$ ${vC.toFixed(2)} | <b style="color:${corS}">${txtStatus}</b></small></div>`;
+                
+                let valorVisor = (parseFloat(i.venda)||0).toFixed(2);
+                if (i.valorLiquidoRecebido) valorVisor = i.valorLiquidoRecebido.toFixed(2);
+                
+                l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;">${btnReceber}<button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}', 'caixa')">✏️</button><button class="btn-icon" style="color:${corS}; font-size:1.1rem;" onclick="alternarStatusCaixaRapido('${i.id}', '${statusLimpo}')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${valorVisor} | C: R$ ${vC.toFixed(2)} | <b style="color:${corS}">${txtStatus}</b></small></div>`;
             });
 
             tLeoPix += custoRealLeo; tDanPix += custoRealDaniel;
@@ -519,11 +524,7 @@
 
             if(isLucas) {
                 document.getElementById('gridValores').innerHTML = criarCardResumo('MINHA COMISSÃO (JAPÃO) DO DIA', tLcPix, 'var(--green)');
-                document.getElementById('resumoDetalhadoDia').style.display = 'none';
             } else {
-                const divResumo = document.getElementById('resumoDetalhadoDia'); divResumo.style.display = 'block';
-                divResumo.innerHTML = `<div style="display:flex; justify-content:space-between; margin-bottom: 8px; border-bottom: 1px solid #333; padding-bottom: 5px;"><span style="color: var(--blue);">🔧 Serv. Bruto: <b>R$ ${totalBrutoServicos.toFixed(2)}</b></span><span style="color: var(--blue);">Lucro Serv.: <b style="color: var(--green);">R$ ${lucroPuroServicos.toFixed(2)}</b></span></div><div style="display:flex; justify-content:space-between; margin-bottom: 10px;"><span style="color: var(--purple);">📦 Prod. Bruto: <b>R$ ${totalBrutoProdutos.toFixed(2)}</b></span><span style="color: var(--purple);">Lucro Prod.: <b style="color: var(--green);">R$ ${lucroPuroProdutos.toFixed(2)}</b></span></div><div style="border-top: 1px dashed var(--blue); padding-top: 8px;"><div style="font-size: 0.8rem; color: var(--blue); margin-bottom: 5px; font-weight: bold;">💳 RETIDO NO CARTÃO (A DIVIDIR QUANDO CAIR):</div><div style="display:flex; justify-content:space-between; font-size: 0.75rem; color: var(--text); background: #111; padding: 6px; border-radius: 5px;"><span>Léo: <b style="color:var(--yellow)">R$ ${tLeoCard.toFixed(2)}</b></span><span>Daniel: <b style="color:var(--green)">R$ ${tDanCard.toFixed(2)}</b></span><span>Japão: R$ ${tLcCard.toFixed(2)}</span><span>Loja: R$ ${tLjCard.toFixed(2)}</span></div></div>`;
-
                 document.getElementById('gridValores').innerHTML = 
                     `<div class="item-resumo ${estadosPagamento['TOTAL BRUTO'] ? 'pago':''}" style="border-color: var(--green); grid-column: span 2; background: #0c1a0c;" onclick="alternarCheckResumo('TOTAL BRUTO')"><div class="badge-pago">PAGO ✅</div>💰 BRUTO DISPONÍVEL (PIX)<span>R$ ${totalBrutoDia.toFixed(2)}</span></div>` +
                     `<div class="item-resumo ${estadosPagamento['PRESO CARTAO'] ? 'pago':''}" style="border-color: var(--blue); grid-column: span 2; background: #0c131a;" onclick="alternarCheckResumo('PRESO CARTAO')"><div class="badge-pago">PAGO ✅</div>💳 TOTAL RETIDO NO CARTÃO (LÍQUIDO)<span>R$ ${totalPresoCartao.toFixed(2)}</span></div>` +
@@ -577,7 +578,7 @@
         function reabrir(id) { const it = hGeral.find(x => x.id === id); if(it) { const {id, ...rest} = it; db.collection("caixa").add(rest).then(() => db.collection("relatorio").doc(id).delete()); mudar(1); } }
         
         function filtrar() { const termo = document.getElementById('busca').value.toLowerCase(); const dIni = document.getElementById('dataInicioFiltro').value; const dFim = document.getElementById('dataFimFiltro').value; window.filtrados = hGeral.filter(i => { const dataISO = i.dataISO || (i.data ? i.data.toDate().toISOString().split('T')[0] : ""); return (!dIni || dataISO >= dIni) && (!dFim || dataISO <= dFim) && (i.desc.toLowerCase().includes(termo) || (i.os && i.os.includes(termo))); }); renderHist(window.filtrados); }
-        function renderHist(dados) { const l = document.getElementById('listaHist'); l.innerHTML = ''; dados.forEach(i => { let statusLimpo = i.status || 'Pago'; let txtStatus = "✅ PIX"; let colS = 'var(--green)'; if(statusLimpo.includes('Cartao_')) { txtStatus = `💳 CARTÃO ${statusLimpo.split('_')[1]}x`; colS = 'var(--blue)'; } if(statusLimpo.includes('Misto_')) { txtStatus = `🔀 MISTO ${statusLimpo.split('_')[1]}x`; colS = 'var(--purple)'; } if(statusLimpo === 'Em Aberto') { txtStatus = "⏳ ABERTO"; colS = 'var(--yellow)'; } let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : ""; l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;"><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoCaixa('${i.id}', 'relatorio')">✏️</button><button class="btn-icon" style="color:var(--yellow);" onclick="reabrir('${i.id}')">📤</button><button class="btn-icon" style="color:${colS};" onclick="alternarStatus('${i.id}', '${statusLimpo}', 'relatorio')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada} <span style="color:${colS}">[${txtStatus}]</span></small><br>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor || 'LEO'}]</small><br><small>R$ ${(parseFloat(i.venda)||0).toFixed(2)}</small></div>`; }); }
+        function renderHist(dados) { const l = document.getElementById('listaHist'); l.innerHTML = ''; dados.forEach(i => { let statusLimpo = i.status || 'Pago'; let txtStatus = "✅ PIX"; let colS = 'var(--green)'; if(statusLimpo.includes('Cartao_')) { txtStatus = `💳 CARTÃO ${statusLimpo.split('_')[1]}x`; colS = 'var(--yellow)'; } if(statusLimpo.includes('Misto_')) { txtStatus = `🔀 MISTO ${statusLimpo.split('_')[1]}x`; colS = 'var(--purple)'; } if(statusLimpo === 'Em Aberto') { txtStatus = "⏳ ABERTO"; colS = 'var(--red)'; } let osTxt = i.os ? `<span class="tag-os">OS ${i.os}</span>` : ""; l.innerHTML += `<div class="venda-item" style="border-left:5px solid grey"><div style="float:right;"><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoCaixa('${i.id}', 'relatorio')">✏️</button><button class="btn-icon" style="color:var(--yellow);" onclick="reabrir('${i.id}')">📤</button><button class="btn-icon" style="color:${colS};" onclick="alternarStatus('${i.id}', '${statusLimpo}', 'relatorio')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('relatorio').doc('${i.id}').delete()">🗑️</button></div><small>${i.dataFormatada} <span style="color:${colS}">[${txtStatus}]</span></small><br>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor || 'LEO'}]</small><br><small>R$ ${(parseFloat(i.venda)||0).toFixed(2)}</small></div>`; }); }
         
         function gerarRelatorioFiltrado() {
             let dados = window.filtrados || []; if(dados.length === 0) return alert("Nenhum dado no filtro!");
@@ -606,4 +607,3 @@
     </script>
 </body>
 </html>
-
