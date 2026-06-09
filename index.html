@@ -132,6 +132,8 @@
                     <button id="btnCancelarCaixa" class="btn" style="background:#444; color:#fff; display:none;" onclick="cancelarEdicaoCaixa()">Cancelar Edição</button>
                 </div>
                 
+                <div id="resumoDetalhadoDia" style="display:none; background: #0c0c0c; padding: 10px; border-radius: 8px; border: 1px dashed var(--gray); margin-bottom: 15px; font-size: 0.85rem;"></div>
+                
                 <div id="gridValores" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;"></div>
                 <div id="listaCaixa" style="max-height:300px; overflow-y:auto;"></div>
                 <button id="btnArquivar" class="btn" style="background:#22c55e; color:black;" onclick="arquivar()">PIX FEITO ✅ (Arquivar Caixa)</button>
@@ -212,6 +214,7 @@
                     <h2>⚙️ TAXAS ATUAIS LOJA</h2>
                     <label>Loja % Serv</label><input type="number" id="cfgLojaServ">
                     <label>Lucas % Serv</label><input type="number" id="cfgLucasServ">
+                    <label>Lucas % Prod</label><input type="number" id="cfgLucasProd">
                     <hr>
                     <h3 style="color:var(--blue)">💳 TAXAS INFINITYPAY (%)</h3>
                     <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
@@ -274,6 +277,7 @@
                     configGlobal = doc.data(); 
                     document.getElementById('cfgLojaServ').value = configGlobal.lojaServ || 0;
                     document.getElementById('cfgLucasServ').value = configGlobal.lucasServ || 30;
+                    document.getElementById('cfgLucasProd').value = configGlobal.lucasProd !== undefined ? configGlobal.lucasProd : 5;
                     document.getElementById('cfgSociosServLeo').value = configGlobal.sociosServLeo || 60;
                     document.getElementById('cfgSociosProdLeo').value = configGlobal.sociosProdLeo || 50;
                     for(let f=1; f<=12; f++) { if(configGlobal['tx'+f] !== undefined) document.getElementById('tx'+f).value = configGlobal['tx'+f]; }
@@ -425,8 +429,7 @@
                 
                 let IsCartaoPuro = statusLimpo.includes('Cartao_'); let IsMisto = statusLimpo.includes('Misto_'); let IsPagoPix = statusLimpo === 'Pago';
 
-                let vPix = 0; let vCard = 0;
-                let vLiquidoCalculado = 0; 
+                let vPix = 0; let vCard = 0; let vLiquidoCalculado = 0; 
 
                 if (IsCartaoPuro) {
                     let p = statusLimpo.split('_')[1] || "1"; let taxaRaw = document.getElementById('tx' + p).value || "0";
@@ -452,42 +455,65 @@
                     let ratioCard = totalVendaLiquida > 0 ? (vCard / totalVendaLiquida) : (IsCartaoPuro ? 1 : 0);
 
                     let totalCustoItem = 0;
+                    let cLoja = 0, cDan = 0, cLeo = 0;
+
                     if (i.detalhes && i.detalhes.length > 0) {
                         i.detalhes.forEach(det => {
                             let cDet = parseFloat(det.custo) || 0; let dono = det.donoCusto || "Loja";
-                            if (dono === "Loja") custoRealLoja += cDet; else if (dono === "Daniel") custoRealDaniel += cDet; else if (dono === "Leo") custoRealLeo += cDet;
+                            if (dono === "Loja") cLoja += cDet;
+                            else if (dono === "Daniel") cDan += cDet;
+                            else if (dono === "Leo") cLeo += cDet;
                             totalCustoItem += cDet;
                         });
-                    } else { custoRealLoja += vC; totalCustoItem = vC; }
+                    } else { 
+                        cLoja += vC; totalCustoItem = vC; 
+                    }
 
-                    if(i.origem === 'Leo') { t3DLeoCusto += totalCustoItem; }
+                    custoRealLoja += cLoja * ratioPix;
+                    custoRealDaniel += cDan * ratioPix;
+                    custoRealLeo += cLeo * ratioPix;
+
+                    if(i.origem === 'Leo') { t3DLeoCusto += totalCustoItem * ratioPix; }
                     
-                    let txCobrada = 0, lucroParaDividir = 0, pLc = 0, pLeo = 0, pDan = 0;
+                    let lucroBruto = totalVendaLiquida - totalCustoItem; 
+                    if (lucroBruto < 0) lucroBruto = 0;
+
+                    let txCobrada = 0, pLc = 0, pLeo = 0, pDan = 0;
                     
+                    // --- 1. TAXA DA LOJA PRIMEIRO ---
                     if(i.tipo === "Serviço") {
-                        let lucroBrutoServico = totalVendaLiquida - totalCustoItem; 
-                        txCobrada = lucroBrutoServico > 0 ? lucroBrutoServico * ((configGlobal.lojaServ || 0)/100) : 0; 
-                        lucroParaDividir = lucroBrutoServico - txCobrada;
-                        pLc = isLucasVendedor ? (lucroParaDividir * ((configGlobal.lucasServ || 30)/100)) : 0;
-                        pLeo = (lucroParaDividir - pLc) * (pctServLeo / 100);
-                        pDan = (lucroParaDividir - pLc) * (pctServDan / 100);
+                        txCobrada = lucroBruto * ((configGlobal.lojaServ || 0)/100); 
                     } else {
-                        let lucroBruto = totalVendaLiquida - totalCustoItem;
-                        txCobrada = lucroBruto > 0 ? lucroBruto * ((configGlobal.lojaProd || 0)/100) : 0; 
-                        lucroParaDividir = lucroBruto - txCobrada;
-                        pLc = isLucasVendedor ? (lucroParaDividir * ((configGlobal.lucasProd || 30)/100)) : 0;
-                        pLeo = (lucroParaDividir - pLc) * (pctProdLeo / 100);
-                        pDan = (lucroParaDividir - pLc) * (pctProdDan / 100);
+                        txCobrada = lucroBruto * ((configGlobal.lojaProd || 0)/100); 
+                    }
+                    
+                    let lucroPosLoja = lucroBruto - txCobrada;
+
+                    // --- 2. COMISSÃO DO LUCAS NO QUE SOBROU ---
+                    if(i.tipo === "Serviço") {
+                        pLc = isLucasVendedor ? (lucroPosLoja * ((configGlobal.lucasServ || 30)/100)) : 0;
+                    } else {
+                        pLc = isLucasVendedor ? (lucroPosLoja * ((configGlobal.lucasProd || 5)/100)) : 0; 
+                    }
+                    
+                    let lucroLiquidoReal = lucroPosLoja - pLc;
+                    
+                    // --- 3. DIVISÃO SÓCIOS ---
+                    if(i.tipo === "Serviço") {
+                        pLeo = lucroLiquidoReal * (pctServLeo / 100);
+                        pDan = lucroLiquidoReal * (pctServDan / 100);
+                    } else {
+                        pLeo = lucroLiquidoReal * (pctProdLeo / 100);
+                        pDan = lucroLiquidoReal * (pctProdDan / 100);
                     }
 
                     tLjPix += txCobrada * ratioPix; tLjCard += txCobrada * ratioCard;
-                    tLcPix += pLc * ratioPix; tLcCard += pLc * ratioCard;
-                    tLeoPix += pLeo * ratioPix; tLeoCard += pLeo * ratioCard;
-                    tDanPix += pDan * ratioPix; tDanCard += pDan * ratioCard;
+                    tLcPix += pLc * ratioPix;       tLcCard += pLc * ratioCard;
+                    tLeoPix += pLeo * ratioPix;     tLeoCard += pLeo * ratioCard;
+                    tDanPix += pDan * ratioPix;     tDanCard += pDan * ratioCard;
                 }
                 
                 let corB = i.origem === 'Leo' ? 'var(--purple)' : (i.tipo === 'Serviço' ? '#0088ff' : '#22c55e');
-                
                 let txtStatus = "✅ PIX/Dinheiro", corS = 'var(--green)';
                 if(IsCartaoPuro) { txtStatus = `💳 Cartão ${statusLimpo.split('_')[1] || ''}x`; corS = 'var(--yellow)'; }
                 if(IsMisto) { txtStatus = `🔀 Misto ${statusLimpo.split('_')[1] || ''}x`; corS = 'var(--purple)'; }
@@ -502,19 +528,23 @@
                 l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;">${btnReceber}<button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}', 'caixa')">✏️</button><button class="btn-icon" style="color:${corS}; font-size:1.1rem;" onclick="alternarStatusCaixaRapido('${i.id}', '${statusLimpo}')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${valorVisor} | C: R$ ${vC.toFixed(2)} | <b style="color:${corS}">${txtStatus}</b></small></div>`;
             });
 
-            tLeoPix += custoRealLeo; tDanPix += custoRealDaniel;
-
             mapaValoresAbatidosCaixa = {}; let cardsDividasHTML = ""; let totalDividasRetidasHoje = 0;
+            
             dividasLista.forEach(d => {
                 if (d.ativa && d.porcentagem > 0 && d.saldoRestante > 0) {
-                    let descontoDaVez = tLeoPix * (d.porcentagem / 100); if (descontoDaVez > d.saldoRestante) descontoDaVez = d.saldoRestante; 
-                    tLeoPix -= descontoDaVez; mapaValoresAbatidosCaixa[d.id] = descontoDaVez; totalDividasRetidasHoje += descontoDaVez;
+                    let descontoDaVez = tLeoPix * (d.porcentagem / 100); 
+                    if (descontoDaVez > d.saldoRestante) descontoDaVez = d.saldoRestante; 
+                    
+                    tLeoPix -= descontoDaVez; 
+                    mapaValoresAbatidosCaixa[d.id] = descontoDaVez; 
+                    totalDividasRetidasHoje += descontoDaVez; 
+                    
                     const chaveStatus = `DANIEL (${d.nome.toUpperCase()})`;
                     cardsDividasHTML += `<div class="item-resumo ${estadosPagamento[chaveStatus] ? 'pago' : ''}" style="border-color: var(--purple); grid-column: span 2;" onclick="alternarCheckResumo('${chaveStatus}')"><div class="badge-pago">PAGO ✅</div>DANIEL (${d.nome.toUpperCase()}) <small style="color:var(--gray); display:inline;">[Falta R$ ${d.saldoRestante.toFixed(2)}]</small><span>R$ ${descontoDaVez.toFixed(2)}</span></div>`;
                 }
             });
 
-            let totalPixDanielReal = tDanPix + totalDividasRetidasHoje; 
+            let totalPixDanielReal = tDanPix + custoRealDaniel + totalDividasRetidasHoje; 
 
             const criarCardResumo = (label, valor, corBorda = 'var(--gray)') => {
                 const estaPago = estadosPagamento[label] ? 'pago' : ''; return `<div class="item-resumo ${estaPago}" style="border-color:${corBorda}" onclick="alternarCheckResumo('${label}')"><div class="badge-pago">PAGO ✅</div>${label}<span>R$ ${valor.toFixed(2)}</span></div>`;
@@ -586,9 +616,22 @@
                 if (IsCartaoPuro) { let p = statusLimpo.split('_')[1] || "1"; let taxaRaw = document.getElementById('tx' + p).value || "0"; let taxaMaquininha = parseFloat(taxaRaw.toString().replace(',', '.')) || 0; vV = vV * (1 - (taxaMaquininha / 100)); totalCartao += vV; } else if(IsMisto) { let p = statusLimpo.split('_')[1] || "1"; let taxaRaw = document.getElementById('tx' + p).value || "0"; let tx = parseFloat(taxaRaw.toString().replace(',', '.')) || 0; let pDin = parseFloat(i.mistoDinheiro) || 0; let pCard = parseFloat(i.mistoCartao) || 0; let pCardLiquido = pCard * (1 - (tx / 100)); b += pDin; totalCartao += pCardLiquido; vV = pDin + pCardLiquido; } else if (statusLimpo === 'Pago') { b += vV; }
                 if (statusLimpo === 'Pago' || IsCartaoPuro || IsMisto) {
                     if(i.origem === 'Leo') { m3d += vC; } else { invest += vC; }
-                    let tx = 0, lucFinal = 0;
-                    if(i.tipo === "Serviço") { let lucroB = vV - vC; tx = lucroB > 0 ? lucroB * ((configGlobal.lojaServ || 0)/100) : 0; lucFinal = lucroB - tx; let pLc = isLucasVendedor ? lucFinal * ((configGlobal.lucasServ || 30)/100) : 0; lucas += pLc; leo += (lucFinal-pLc)*(configGlobal.sociosServLeo/100); dan += (lucFinal-pLc)*(100 - configGlobal.sociosServLeo/100);
-                    } else { let lucroBruto = vV - vC; tx = lucroBruto > 0 ? lucroBruto * ((configGlobal.lojaProd || 0)/100) : 0; lucFinal = lucroBruto - tx; let pLc = isLucasVendedor ? lucFinal * ((configGlobal.lucasProd || 30)/100) : 0; lucas += pLc; leo += (lucFinal-pLc)*(configGlobal.sociosProdLeo/100); dan += (lucFinal-pLc)*(100 - configGlobal.sociosProdLeo/100); }
+                    let lucroBruto = vV - vC; if (lucroBruto < 0) lucroBruto = 0;
+                    let pLc = 0, tx = 0, lucFinal = 0;
+                    
+                    if(i.tipo === "Serviço") { 
+                        tx = lucroBruto * ((configGlobal.lojaServ || 0)/100); 
+                        let lucroPosLoja = lucroBruto - tx;
+                        pLc = isLucasVendedor ? (lucroPosLoja * ((configGlobal.lucasServ || 30)/100)) : 0;
+                        lucFinal = lucroPosLoja - pLc; 
+                        lucas += pLc; leo += lucFinal*(configGlobal.sociosServLeo/100); dan += lucFinal*(100 - configGlobal.sociosServLeo/100);
+                    } else { 
+                        tx = lucroBruto * ((configGlobal.lojaProd || 0)/100); 
+                        let lucroPosLoja = lucroBruto - tx;
+                        pLc = isLucasVendedor ? (lucroPosLoja * ((configGlobal.lucasProd || 5)/100)) : 0;
+                        lucFinal = lucroPosLoja - pLc; 
+                        lucas += pLc; leo += lucFinal*(configGlobal.sociosProdLeo/100); dan += lucFinal*(100 - configGlobal.sociosProdLeo/100); 
+                    }
                     loja += tx;
                 }
             });
@@ -599,37 +642,14 @@
         function toggleCategoria(id) { const content = document.getElementById('cont-' + id); const icon = document.getElementById('icon-' + id); content.style.display = (content.style.display === 'block') ? 'none' : 'block'; icon.innerText = (content.style.display === 'block') ? '▲' : '▼'; }
         function renderEstoqueList() { const container = document.getElementById('listaEstoqueAgrupada'); container.innerHTML = ''; const rands = [{ id: 'Leo3D', nome: '🎨 3D Léo' }, { id: 'Serviço', nome: '🔧 Uso em Serviço' }, { id: 'Produto', nome: '📦 Venda Direta' }]; rands.forEach(cat => { const itensCat = pEstoque.filter(p => p.categoria === cat.id).sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1)); if (itensCat.length > 0) { container.innerHTML += `<div class="header-categoria" onclick="toggleCategoria('${cat.id}')"><span>${cat.nome} (${itensCat.length})</span><span id="icon-${cat.id}">▼</span></div><div id="cont-${cat.id}" class="conteudo-categoria">${itensCat.map(p => `<div class="card" style="padding:10px; margin-bottom:8px; border-top:none; display:flex; justify-content:space-between; align-items:center;"><span>${p.favorito?'⭐':''} ${p.nome}<br><small style="color:var(--gray)">Qtd: ${p.qtd} | C: R$ ${(p.custo||0).toFixed(2)} [${p.donoCusto || 'Loja'}] | V: R$ ${(p.vendaSugerida||0).toFixed(2)}</small></span><div><button class="btn-icon" style="color:var(--blue);" onclick="prepararEdicaoPeca('${p.id}','${p.nome}','${p.custo}','${p.vendaSugerida||''}','${p.qtd}','${p.categoria}',${p.favorito},'${p.donoCusto || 'Loja'}')">✏️</button><button class="btn-icon" style="color:var(--red);" onclick="if(confirm('Apagar?'))db.collection('estoque').doc('${p.id}').delete()">🗑️</button></div></div>`).join('')}</div>`; } }); }
         function addEstoque() { const id = document.getElementById('editPecaId').value, n = document.getElementById('nProd').value, c = document.getElementById('cProd').value, v = document.getElementById('vSug').value, q = parseInt(document.getElementById('qProd').value), cat = document.getElementById('catProd').value, fav = document.getElementById('favProd').checked; const dono = document.getElementById('catDonoCustEstoque').value || "Loja"; const dados = {nome:n, custo:parseFloat(c)||0, vendaSugerida:parseFloat(v)||0, qtd:q, categoria:cat, favorito: fav, donoCusto: dono}; if(id) db.collection("estoque").doc(id).update(dados).then(() => cancelarEdicaoPeca()); else db.collection("estoque").add(dados).then(() => { document.getElementById('nProd').value=''; document.getElementById('cProd').value=''; document.getElementById('vSug').value=''; }); }
-        function salvarConfig() { let obj = { lojaServ: parseFloat(document.getElementById('cfgLojaServ').value)||0, lucasServ: parseFloat(document.getElementById('cfgLucasServ').value)||30, sociosServLeo: parseFloat(document.getElementById('cfgSociosServLeo').value)||60, sociosProdLeo: parseFloat(document.getElementById('cfgSociosProdLeo').value)||50 }; for(let f=1; f<=12; f++) { obj['tx'+f] = parseFloat(document.getElementById('tx'+f).value)||0; } db.collection("config").doc("geral").update(obj).then(()=>alert("Configurações salvas!")); }
+        function salvarConfig() { let obj = { lojaServ: parseFloat(document.getElementById('cfgLojaServ').value)||0, lucasServ: parseFloat(document.getElementById('cfgLucasServ').value)||30, lucasProd: parseFloat(document.getElementById('cfgLucasProd').value)||0, sociosServLeo: parseFloat(document.getElementById('cfgSociosServLeo').value)||60, sociosProdLeo: parseFloat(document.getElementById('cfgSociosProdLeo').value)||50 }; for(let f=1; f<=12; f++) { obj['tx'+f] = parseFloat(document.getElementById('tx'+f).value)||0; } db.collection("config").doc("geral").update(obj).then(()=>alert("Configurações salvas!")); }
         function mudar(n) { const ids=['aba1','aba2','aba3','aba4','aba5']; ids.forEach((id,i)=>document.getElementById(id).style.display=(i+1===n)?'block':'none'); document.querySelectorAll('.btn-tab').forEach((b,i)=>b.classList.toggle('active-tab', i+1===n)); }
 
-        // --- FUNÇÕES INJETADAS ---
         function prepararEdicaoPeca(id, n, c, v, q, cat, fav, dono) {
-            document.getElementById('editPecaId').value = id;
-            document.getElementById('nProd').value = n;
-            document.getElementById('cProd').value = c;
-            document.getElementById('vSug').value = v;
-            document.getElementById('qProd').value = q;
-            document.getElementById('catProd').value = cat;
-            document.getElementById('favProd').checked = (fav === true || String(fav) === "true");
-            document.getElementById('catDonoCustEstoque').value = dono || 'Loja';
-            document.getElementById('tituloEstoque').innerText = "✏️ EDITANDO ESTOQUE";
-            document.getElementById('btnSalvarEstoque').innerText = "Salvar Alteração";
-            document.getElementById('btnCancelarEdit').style.display = 'inline-block';
-            window.scrollTo(0, 0);
+            document.getElementById('editPecaId').value = id; document.getElementById('nProd').value = n; document.getElementById('cProd').value = c; document.getElementById('vSug').value = v; document.getElementById('qProd').value = q; document.getElementById('catProd').value = cat; document.getElementById('favProd').checked = (fav === true || String(fav) === "true"); document.getElementById('catDonoCustEstoque').value = dono || 'Loja'; document.getElementById('tituloEstoque').innerText = "✏️ EDITANDO ESTOQUE"; document.getElementById('btnSalvarEstoque').innerText = "Salvar Alteração"; document.getElementById('btnCancelarEdit').style.display = 'inline-block'; window.scrollTo(0, 0);
         }
-
         function cancelarEdicaoPeca() {
-            document.getElementById('editPecaId').value = '';
-            document.getElementById('nProd').value = '';
-            document.getElementById('cProd').value = '';
-            document.getElementById('vSug').value = '';
-            document.getElementById('qProd').value = '1';
-            document.getElementById('catProd').value = 'Serviço';
-            document.getElementById('favProd').checked = false;
-            document.getElementById('catDonoCustEstoque').value = 'Loja';
-            document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE";
-            document.getElementById('btnSalvarEstoque').innerText = "Salvar";
-            document.getElementById('btnCancelarEdit').style.display = 'none';
+            document.getElementById('editPecaId').value = ''; document.getElementById('nProd').value = ''; document.getElementById('cProd').value = ''; document.getElementById('vSug').value = ''; document.getElementById('qProd').value = '1'; document.getElementById('catProd').value = 'Serviço'; document.getElementById('favProd').checked = false; document.getElementById('catDonoCustEstoque').value = 'Loja'; document.getElementById('tituloEstoque').innerText = "➕ ESTOQUE"; document.getElementById('btnSalvarEstoque').innerText = "Salvar"; document.getElementById('btnCancelarEdit').style.display = 'none';
         }
     </script>
 </body>
