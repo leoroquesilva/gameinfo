@@ -136,7 +136,7 @@
                 
                 <div id="gridValores" style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:15px;"></div>
                 <div id="listaCaixa" style="max-height:300px; overflow-y:auto;"></div>
-                <button id="btnArquivar" class="btn" style="background:#22c55e; color:black;" onclick="arquivar()">PIX FEITO ✅ (Arquivar Caixa)</button>
+                <button id="btnArquivar" class="btn" style="background:#22c55e; color:black;" onclick="arquivar()">PIX FEITO ✅ (Arquivar Caixa e Abater Dívidas)</button>
             </div>
 
             <div id="aba2" style="display:none;">
@@ -206,6 +206,10 @@
                     <hr>
                     <h3>Dívidas Ativas e Saldos Restantes</h3>
                     <div id="listaDividasCadastradas" style="margin-top: 10px; font-size: 0.85rem;"></div>
+                    <hr>
+                    <h3 style="color: var(--blue);">📊 Relatório Detalhado de Pagamentos</h3>
+                    <button class="btn" style="background: #222; color: white; border: 1px solid var(--blue); margin-top: 0;" onclick="carregarHistoricoDividas()">🔄 Carregar Histórico Completo</button>
+                    <div id="listaHistoricoDividas" style="margin-top: 15px; font-size: 0.85rem; max-height: 250px; overflow-y: auto;"></div>
                 </div>
             </div>
 
@@ -396,17 +400,47 @@
         }
 
         function arquivar() {
-            if(!confirm("Tem certeza que deseja fechar o caixa de hoje? \n\nAs vendas pagas em PIX serão salvas no histórico. As vendas no Cartão ou em Aberto ficarão blindadas na tela para segunda-feira.")) return;
+            if(!confirm("Tem certeza que deseja fechar o caixa de hoje? \n\nAs vendas pagas em PIX serão salvas no histórico e as dívidas ativas serão abatidas do saldo devedor.")) return;
             
-            cAtual.forEach(i => {
-                if (i.status === 'Pago') {
-                    db.collection("relatorio").doc(i.id).set(i).then(() => { db.collection("caixa").doc(i.id).delete(); });
-                } else if (i.status && i.status.includes('Misto_')) {
-                    let pDin = parseFloat(i.mistoDinheiro) || 0; let pCard = parseFloat(i.mistoCartao) || 0; let p = i.status.split('_')[1] || "1";
-                    let pixItem = { ...i, status: 'Pago', venda: pDin, mistoDinheiro: 0, mistoCartao: 0, desc: i.desc + " (Ref. PIX do Misto)" };
-                    let cardItemUpdate = { status: 'Cartao_' + p, venda: pCard, custo: 0, mistoDinheiro: 0, mistoCartao: 0, detalhes: i.detalhes ? i.detalhes.map(d => ({...d, custo: 0})) : [], desc: i.desc + " (Ref. Cartão do Misto)" };
-                    db.collection("relatorio").doc(i.id + "_pix").set(pixItem).then(() => { db.collection("caixa").doc(i.id).update(cardItemUpdate); });
+            // NOVO: Abater as dívidas retidas e registrar no histórico ANTES de limpar o caixa
+            let promessasDividas = [];
+            for (const [idDivida, valorAbatido] of Object.entries(mapaValoresAbatidosCaixa)) {
+                if (valorAbatido > 0) {
+                    const dividaInfo = dividasLista.find(d => d.id === idDivida);
+                    if(dividaInfo) {
+                        // Desconta o saldo
+                        let p1 = db.collection("dividas").doc(idDivida).update({
+                            saldoRestante: firebase.firestore.FieldValue.increment(-valorAbatido)
+                        });
+                        // Cria o recibo detalhado
+                        let p2 = db.collection("historico_dividas").add({
+                            idDivida: idDivida,
+                            nomeDivida: dividaInfo.nome,
+                            valorPago: valorAbatido,
+                            tipo: "Fechamento Diário (Automático)",
+                            data: firebase.firestore.FieldValue.serverTimestamp(),
+                            dataStr: new Date().toLocaleString('pt-BR')
+                        });
+                        promessasDividas.push(p1, p2);
+                    }
                 }
+            }
+
+            Promise.all(promessasDividas).then(() => {
+                // Rotina normal de arquivamento das vendas
+                cAtual.forEach(i => {
+                    if (i.status === 'Pago') {
+                        db.collection("relatorio").doc(i.id).set(i).then(() => { db.collection("caixa").doc(i.id).delete(); });
+                    } else if (i.status && i.status.includes('Misto_')) {
+                        let pDin = parseFloat(i.mistoDinheiro) || 0; let pCard = parseFloat(i.mistoCartao) || 0; let p = i.status.split('_')[1] || "1";
+                        let pixItem = { ...i, status: 'Pago', venda: pDin, mistoDinheiro: 0, mistoCartao: 0, desc: i.desc + " (Ref. PIX do Misto)" };
+                        let cardItemUpdate = { status: 'Cartao_' + p, venda: pCard, custo: 0, mistoDinheiro: 0, mistoCartao: 0, detalhes: i.detalhes ? i.detalhes.map(d => ({...d, custo: 0})) : [], desc: i.desc + " (Ref. Cartão do Misto)" };
+                        db.collection("relatorio").doc(i.id + "_pix").set(pixItem).then(() => { db.collection("caixa").doc(i.id).update(cardItemUpdate); });
+                    }
+                });
+                alert("Caixa fechado com sucesso e dívidas abatidas!");
+            }).catch(e => {
+                alert("Erro ao abater as dívidas: " + e);
             });
         }
 
@@ -480,7 +514,6 @@
 
                     let txCobrada = 0, pLc = 0, pLeo = 0, pDan = 0;
                     
-                    // --- 1. TAXA DA LOJA PRIMEIRO ---
                     if(i.tipo === "Serviço") {
                         txCobrada = lucroBruto * ((configGlobal.lojaServ || 0)/100); 
                     } else {
@@ -489,7 +522,6 @@
                     
                     let lucroPosLoja = lucroBruto - txCobrada;
 
-                    // --- 2. COMISSÃO DO LUCAS NO QUE SOBROU ---
                     if(i.tipo === "Serviço") {
                         pLc = isLucasVendedor ? (lucroPosLoja * ((configGlobal.lucasServ || 30)/100)) : 0;
                     } else {
@@ -498,7 +530,6 @@
                     
                     let lucroLiquidoReal = lucroPosLoja - pLc;
                     
-                    // --- 3. DIVISÃO SÓCIOS ---
                     if(i.tipo === "Serviço") {
                         pLeo = lucroLiquidoReal * (pctServLeo / 100);
                         pDan = lucroLiquidoReal * (pctServDan / 100);
@@ -528,6 +559,7 @@
                 l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;">${btnReceber}<button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}', 'caixa')">✏️</button><button class="btn-icon" style="color:${corS}; font-size:1.1rem;" onclick="alternarStatusCaixaRapido('${i.id}', '${statusLimpo}')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${valorVisor} | C: R$ ${vC.toFixed(2)} | <b style="color:${corS}">${txtStatus}</b></small></div>`;
             });
 
+            // Reseta o mapa de retenções diárias
             mapaValoresAbatidosCaixa = {}; let cardsDividasHTML = ""; let totalDividasRetidasHoje = 0;
             
             dividasLista.forEach(d => {
@@ -598,7 +630,59 @@
         }
 
         function cadastrarDivida() { const nome = document.getElementById('dividaNome').value; const total = parseFloat(document.getElementById('dividaTotal').value) || 0; const pct = parseFloat(document.getElementById('dividaPct').value) || 0; if(!nome || total <= 0) return alert("Preencha a descrição e o valor correto!"); db.collection("dividas").add({ nome, totalOriginal: total, saldoRestante: total, porcentagem: pct, ativa: false }).then(() => { document.getElementById('dividaNome').value = ""; document.getElementById('dividaTotal').value = ""; document.getElementById('dividaPct').value = "0"; alert("Dívida cadastrada!"); }); }
-        function lancarPagamentoAvulso() { const idDivida = document.getElementById('selectDividaAvulso').value; const valorPago = parseFloat(document.getElementById('valorAvulsoDivida').value) || 0; if(!idDivida) return alert("Selecione uma dívida para abater!"); if(valorPago <= 0) return alert("Digite um valor válido de pagamento!"); const divida = dividasLista.find(d => d.id === idDivida); if(valorPago > divida.saldoRestante) { return alert(`Valor maior que o saldo devedor! Resta R$ ${divida.saldoRestante.toFixed(2)}`); } db.collection("dividas").doc(idDivida).update({ saldoRestante: firebase.firestore.FieldValue.increment(-valorPago) }).then(() => { document.getElementById('valorAvulsoDivida').value = ""; alert(`Pagamento abatido!`); }); }
+        
+        function lancarPagamentoAvulso() { 
+            const idDivida = document.getElementById('selectDividaAvulso').value; 
+            const valorPago = parseFloat(document.getElementById('valorAvulsoDivida').value) || 0; 
+            if(!idDivida) return alert("Selecione uma dívida para abater!"); 
+            if(valorPago <= 0) return alert("Digite um valor válido de pagamento!"); 
+            const divida = dividasLista.find(d => d.id === idDivida); 
+            if(valorPago > divida.saldoRestante) { return alert(`Valor maior que o saldo devedor! Resta R$ ${divida.saldoRestante.toFixed(2)}`); } 
+            
+            // NOVO: Abate e registra no histórico de uma vez só
+            db.collection("dividas").doc(idDivida).update({ saldoRestante: firebase.firestore.FieldValue.increment(-valorPago) }).then(() => { 
+                db.collection("historico_dividas").add({
+                    idDivida: idDivida,
+                    nomeDivida: divida.nome,
+                    valorPago: valorPago,
+                    tipo: "Pagamento Avulso (Manual)",
+                    data: firebase.firestore.FieldValue.serverTimestamp(),
+                    dataStr: new Date().toLocaleString('pt-BR')
+                });
+                document.getElementById('valorAvulsoDivida').value = ""; 
+                alert(`Pagamento abatido e registrado no histórico!`); 
+                carregarHistoricoDividas();
+            }); 
+        }
+
+        // NOVO: Função para buscar e exibir os relatórios de pagamentos
+        function carregarHistoricoDividas() {
+            const lista = document.getElementById('listaHistoricoDividas');
+            lista.innerHTML = 'Carregando histórico...';
+            db.collection("historico_dividas").orderBy("data", "desc").limit(50).get().then(s => {
+                lista.innerHTML = '';
+                if(s.empty) {
+                    lista.innerHTML = '<p style="color:var(--gray)">Nenhum pagamento registrado ainda no sistema.</p>';
+                    return;
+                }
+                s.forEach(doc => {
+                    let d = doc.data();
+                    let corBorda = d.tipo.includes('Automático') ? 'var(--blue)' : 'var(--green)';
+                    lista.innerHTML += `
+                        <div class="card" style="padding: 10px; margin-bottom: 8px; border-left: 4px solid ${corBorda}; background: #111;">
+                            <div style="display:flex; justify-content:space-between; align-items: center;">
+                                <b style="color:var(--yellow)">${d.nomeDivida.toUpperCase()}</b>
+                                <span style="color:${corBorda}; font-weight:bold; font-size:1.1rem;">R$ ${d.valorPago.toFixed(2)}</span>
+                            </div>
+                            <small style="color:var(--gray); display:block; margin-top:5px;">📅 ${d.dataStr} <br>📌 ${d.tipo}</small>
+                        </div>
+                    `;
+                });
+            }).catch(e => {
+                lista.innerHTML = '<p style="color:var(--red)">Erro ao carregar o relatório.</p>';
+            });
+        }
+
         function renderPainelDividas() { const lista = document.getElementById('listaDividasCadastradas'); const selectAvulso = document.getElementById('selectDividaAvulso'); lista.innerHTML = ''; selectAvulso.innerHTML = '<option value="">-- Escolha a Dívida para Abater --</option>'; if (dividasLista.length === 0) { lista.innerHTML = '<p style="color:var(--gray)">Nenhuma dívida registrada.</p>'; return; } dividasLista.forEach(d => { const checkAtivo = d.ativa ? 'checked' : ''; if (d.saldoRestante > 0) { selectAvulso.innerHTML += `<option value="${d.id}">${d.nome.toUpperCase()} (Falta R$ ${d.saldoRestante.toFixed(2)})</option>`; } lista.innerHTML += `<div class="card" style="border-top: 2px solid ${d.ativa ? 'var(--green)' : '#333'}; padding: 10px; margin-bottom: 10px; background: #0c0c0c;"><div style="display:flex; justify-content:space-between; align-items:center;"><b>${d.nome.toUpperCase()}</b><button onclick="if(confirm('Remover?')) db.collection('dividas').doc('${d.id}').delete()" style="color:var(--red); background:none; border:none; cursor:pointer; font-weight:bold;">✕</button></div><div style="margin: 5px 0; color: var(--gray); font-size:0.8rem;">Original: R$ ${d.totalOriginal.toFixed(2)} | <b style="color: var(--purple)">Falta Abater: R$ ${d.saldoRestante.toFixed(2)}</b></div><div style="display:flex; gap:10px; align-items:center; margin-top:8px;"><label style="font-size:0.75rem; color:var(--yellow)">% Lucro Léo:</label><input type="number" value="${d.porcentagem}" onchange="atualizarRegraDivida('${d.id}', 'porcentagem', this.value)" style="width:60px; padding:4px; font-size:0.75rem; margin:0;"><input type="checkbox" ${checkAtivo} id="chk-${d.id}" onchange="atualizarRegraDivida('${d.id}', 'ativa', this.checked)" style="width:18px; margin:0; cursor:pointer;"><label for="chk-${d.id}" style="font-size:0.75rem; color: ${d.ativa ? 'var(--green)' : 'var(--gray)'}; cursor:pointer;"><b>ATIVADA</b></label></div></div>`; }); }
         function atualizarRegraDivida(id, campo, valor) { let dados = {}; if (campo === 'porcentagem') dados.porcentagem = parseFloat(valor) || 0; if (campo === 'ativa') dados.ativa = valor; db.collection("dividas").doc(id).update(dados); }
         function alternarStatus(id, sA, col) { let nS = 'Pago'; if(sA === 'Pago') nS = 'Cartao_1'; else if(sA.includes('Cartao_')) nS = 'Misto_1'; else if(sA.includes('Misto_')) nS = 'Em Aberto'; db.collection(col).doc(id).update({ status: nS }); }
