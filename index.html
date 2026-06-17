@@ -75,7 +75,11 @@
 
                     <div class="carrinho-area">
                         <label style="font-size: 0.7rem; color: var(--yellow); font-weight: bold;">ADICIONAR PRODUTOS/SERVIÇOS:</label>
-                        <select id="tVenda" onchange="renderEstoqueDropdown()"><option value="Serviço">🔧 Serviço</option><option value="Produto">📦 Produto</option></select>
+                        <select id="tVenda" onchange="renderEstoqueDropdown()">
+                            <option value="Serviço">🔧 Serviço</option>
+                            <option value="Produto">📦 Produto</option>
+                            <option value="Leo3D">🎨 3D Léo</option>
+                        </select>
                         <select id="selectPeca" onchange="carregarPeca()"></select>
                         <input type="text" id="nomeAvulso" placeholder="Nome do item manual..." style="display:none;">
                         
@@ -318,7 +322,8 @@
         function renderEstoqueDropdown() {
             const sel = document.getElementById('selectPeca'); const tipo = document.getElementById('tVenda').value;
             sel.innerHTML = '<option value="">-- Selecionar Peça / Serviço --</option>'; sel.innerHTML += '<option value="AVULSO" style="color:var(--yellow)">➕ ITEM AVULSO / MANUAL</option>';
-            pEstoque.filter(p => tipo === "Serviço" ? (p.categoria === "Serviço" || p.categoria === "Leo3D") : (p.categoria === "Produto" || p.categoria === "Leo3D"))
+            
+            pEstoque.filter(p => p.categoria === tipo)
             .sort((a,b) => (a.favorito === b.favorito) ? a.nome.localeCompare(b.nome) : (a.favorito ? -1 : 1))
             .forEach(p => sel.innerHTML += `<option value="${p.custo}" data-venda="${p.vendaSugerida || ''}" data-nome="${p.nome}" data-id="${p.id}" data-cat="${p.categoria}" data-dono="${p.donoCusto || 'Loja'}">${p.favorito ? '⭐ ' : ''}${p.nome}</option>`);
         }
@@ -559,7 +564,6 @@
                 l.innerHTML += `<div class="venda-item" style="border-left:5px solid ${corB}"><div style="float:right;">${btnReceber}<button class="btn-icon" style="color:var(--blue); font-size:1.1rem;" onclick="prepararEdicaoCaixa('${i.id}', 'caixa')">✏️</button><button class="btn-icon" style="color:${corS}; font-size:1.1rem;" onclick="alternarStatusCaixaRapido('${i.id}', '${statusLimpo}')">💲</button><button class="btn-icon" style="color:red;" onclick="if(confirm('Apagar?'))db.collection('caixa').doc('${i.id}').delete()">🗑️</button></div>${osTxt}<b>${i.desc}</b> <small style="color:var(--gray)">[${i.vendedor}]</small><br><small>V: R$ ${valorVisor} | C: R$ ${vC.toFixed(2)} | <b style="color:${corS}">${txtStatus}</b></small></div>`;
             });
 
-            // Reseta o mapa de retenções diárias
             mapaValoresAbatidosCaixa = {}; let cardsDividasHTML = ""; let totalDividasRetidasHoje = 0;
             
             dividasLista.forEach(d => {
@@ -639,7 +643,6 @@
             const divida = dividasLista.find(d => d.id === idDivida); 
             if(valorPago > divida.saldoRestante) { return alert(`Valor maior que o saldo devedor! Resta R$ ${divida.saldoRestante.toFixed(2)}`); } 
             
-            // NOVO: Abate e registra no histórico de uma vez só
             db.collection("dividas").doc(idDivida).update({ saldoRestante: firebase.firestore.FieldValue.increment(-valorPago) }).then(() => { 
                 db.collection("historico_dividas").add({
                     idDivida: idDivida,
@@ -655,7 +658,6 @@
             }); 
         }
 
-        // NOVO: Função para buscar e exibir os relatórios de pagamentos
         function carregarHistoricoDividas() {
             const lista = document.getElementById('listaHistoricoDividas');
             lista.innerHTML = 'Carregando histórico...';
